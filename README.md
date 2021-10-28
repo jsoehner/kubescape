@@ -1,5 +1,7 @@
 <img src="docs/kubescape.png" width="300" alt="logo" align="center">
 
+[![IaC](https://app.soluble.cloud/api/v1/public/badges/9b9bd240-e92c-42ba-a5d5-185e1d6b2e79.svg)](https://app.soluble.cloud/repos/details/github.com/jsoehner/kubescape)  [![CIS](https://app.soluble.cloud/api/v1/public/badges/6afd8cee-705c-4deb-884e-a07fce9ea3f3.svg)](https://app.soluble.cloud/repos/details/github.com/jsoehner/kubescape)  
+
 [![build](https://github.com/armosec/kubescape/actions/workflows/build.yaml/badge.svg)](https://github.com/armosec/kubescape/actions/workflows/build.yaml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/armosec/kubescape)](https://goreportcard.com/report/github.com/armosec/kubescape)
 
