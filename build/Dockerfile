@@ -1,27 +1,39 @@
-FROM golang:1.17-alpine as builder
-#ENV GOPROXY=https://goproxy.io,direct
-ENV GO111MODULE=
-
-ENV CGO_ENABLED=0
+FROM golang:1.20-bullseye as builder
+ARG image_version client
+ENV GO111MODULE=on CGO_ENABLED=1 PYTHONUNBUFFERED=1 RELEASE=$image_version CLIENT=$client
 
 # Install required python/pip
-ENV PYTHONUNBUFFERED=1
-RUN apk add --update --no-cache python3 && ln -sf python3 /usr/bin/python
-RUN python3 -m ensurepip
+RUN apt update
+RUN apt install -y cmake python3-pip
 RUN pip3 install --no-cache --upgrade pip setuptools
 
 WORKDIR /work
 ADD . .
 
-RUN python build.py
+# install libgit2
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg \
+    make libgit2
 
-RUN ls -ltr build/ubuntu-latest
-RUN cat /work/build/ubuntu-latest/kubescape.sha1
+# build kubescape server
+WORKDIR /work/httphandler
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg \
+    python3 build.py
+RUN ls -ltr build/
 
-FROM alpine
-COPY --from=builder /work/build/ubuntu-latest/kubescape /usr/bin/kubescape
+# build kubescape cmd
+WORKDIR /work
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg \
+    python3 build.py
 
-# # Download the frameworks. Use the "--use-default" flag when running kubescape
-# RUN kubescape download framework nsa && kubescape download framework mitre
+RUN /work/build/kubescape-ubuntu-latest download artifacts -o /work/artifacts
 
-ENTRYPOINT ["kubescape"]
+FROM gcr.io/distroless/base-debian11:nonroot
+
+COPY --from=builder /work/artifacts/ /home/nonroot/.kubescape
+COPY --from=builder /work/httphandler/build/kubescape-ubuntu-latest /usr/bin/ksserver
+COPY --from=builder /work/build/kubescape-ubuntu-latest /usr/bin/kubescape
+
+ENTRYPOINT ["ksserver"]

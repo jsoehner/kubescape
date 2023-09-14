@@ -1,255 +1,94 @@
-<img src="docs/kubescape.png" width="300" alt="logo" align="center">
+[![Version](https://img.shields.io/github/v/release/kubescape/kubescape)](https://github.com/kubescape/kubescape/releases)
+[![build](https://github.com/kubescape/kubescape/actions/workflows/02-release.yaml/badge.svg)](https://github.com/kubescape/kubescape/actions/workflows/02-release.yaml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/kubescape/kubescape)](https://goreportcard.com/report/github.com/kubescape/kubescape)
+[![Gitpod Ready-to-Code](https://img.shields.io/badge/Gitpod-Ready--to--Code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/kubescape/kubescape)
+[![GitHub](https://img.shields.io/github/license/kubescape/kubescape)](https://github.com/kubescape/kubescape/blob/master/LICENSE)
+[![CNCF](https://shields.io/badge/CNCF-Sandbox%20project-blue?logo=linux-foundation&style=flat)](https://landscape.cncf.io/card-mode?project=sandbox&selected=kubescape)
+[![Twitter Follow](https://img.shields.io/twitter/follow/kubescape?style=social)](https://twitter.com/kubescape)
 
-[![build](https://github.com/armosec/kubescape/actions/workflows/build.yaml/badge.svg)](https://github.com/armosec/kubescape/actions/workflows/build.yaml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/armosec/kubescape)](https://goreportcard.com/report/github.com/armosec/kubescape)
+# Kubescape
 
-Kubescape is the first open-source tool for testing if Kubernetes is deployed securely according to multiple frameworks:
-regulatory, customized company policies and DevSecOps best practices, such as the  [NSA-CISA](https://www.armosec.io/blog/kubernetes-hardening-guidance-summary-by-armo) and the [MITRE ATT&CK®](https://www.microsoft.com/security/blog/2021/03/23/secure-containerized-environments-with-updated-threat-matrix-for-kubernetes/) .  
-Kubescape scans K8s clusters, YAML files, and HELM charts, and detect misconfigurations and software vulnerabilities at early stages of the CI/CD pipeline and provides a risk score instantly and risk trends over time.
-Kubescape integrates natively with other DevOps tools, including Jenkins, CircleCI and Github workflows.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/cncf/artwork/master/projects/kubescape/stacked/white/kubescape-stacked-white.svg" width="150">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/cncf/artwork/master/projects/kubescape/stacked/color/kubescape-stacked-color.svg" width="150">
+  <img alt="Kubescape logo" align="right" src="https://raw.githubusercontent.com/cncf/artwork/master/projects/kubescape/stacked/color/kubescape-stacked-color.svg" width="150">
+</picture>
 
-</br>
+_An open-source Kubernetes security platform for your IDE, CI/CD pipelines, and clusters_
 
-<img src="docs/demo.gif">
+Kubescape is an open-source Kubernetes security platform. It includes risk analysis, security compliance, and misconfiguration scanning. Targeted at the DevSecOps practitioner or platform engineer, it offers an easy-to-use CLI interface, flexible output formats, and automated scanning capabilities. It saves Kubernetes users and admins precious time, effort, and resources.
 
-# TL;DR
-## Install:
-```
-curl -s https://raw.githubusercontent.com/armosec/kubescape/master/install.sh | /bin/bash
-```
+Kubescape scans clusters, YAML files, and Helm charts. It detects misconfigurations according to multiple frameworks (including [NSA-CISA](https://www.armosec.io/blog/kubernetes-hardening-guidance-summary-by-armo/?utm_source=github&utm_medium=repository), [MITRE ATT&CK®](https://www.microsoft.com/security/blog/2021/03/23/secure-containerized-environments-with-updated-threat-matrix-for-kubernetes/) and the [CIS Benchmark](https://www.armosec.io/blog/cis-kubernetes-benchmark-framework-scanning-tools-comparison/?utm_source=github&utm_medium=repository)).
 
-[Install on windows](#install-on-windows)
+Kubescape was created by [ARMO](https://www.armosec.io/?utm_source=github&utm_medium=repository) and is a [Cloud Native Computing Foundation (CNCF) sandbox project](https://www.cncf.io/sandbox-projects/).
 
-[Install on macOS](#install-on-macos)
+## Demo
+<img src="docs/img/demo.gif">
 
-## Run:
-```
-kubescape scan framework nsa
-```
+_Please [star ⭐](https://github.com/kubescape/kubescape/stargazers) the repo if you want us to continue developing and improving Kubescape! 😀_
 
-<img src="docs/summary.png">
+## Getting started
 
-### Click [👍](https://github.com/armosec/kubescape/stargazers) if you want us to continue to develop and improve Kubescape 😀
+Experimenting with Kubescape is as easy as:
 
-# Being part of the team
-
-We invite you to our team! We are excited about this project and want to return the love we get.
-
-Want to contribute? Want to discuss something? Have an issue?
-
-* Open a issue, we are trying to respond within 48 hours
-* [Join us](https://armosec.github.io/kubescape/) in a discussion on our discord server!
-
-[<img src="docs/discord-banner.png" width="100" alt="logo" align="center">](https://armosec.github.io/kubescape/)
-
-# Options and examples
-
-## Install on Windows
-
-**Requires powershell v5.0+**
-
-``` powershell
-iwr -useb https://raw.githubusercontent.com/armosec/kubescape/master/install.ps1 | iex
+```sh
+curl -s https://raw.githubusercontent.com/kubescape/kubescape/master/install.sh | /bin/bash
 ```
 
-Note: if you get an error you might need to change the execution policy (i.e. enable Powershell) with
+Learn more about:
 
-``` powershell
-Set-ExecutionPolicy RemoteSigned -scope CurrentUser
-```
+* [Installing Kubescape](docs/installation.md)
+* [Running your first scan](docs/getting-started.md#run-your-first-scan)
+* [Usage](docs/getting-started.md#examples)
+* [Architecture](docs/architecture.md)
+* [Building Kubescape from source](https://github.com/kubescape/kubescape/wiki/Building)
 
-## Install on macOS
+_Did you know you can use Kubescape in all these places?_
 
-1. ```
-    brew tap armosec/kubescape
-    ```
-2. ```
-    brew install kubescape
-    ```
+<div align="center">
+    <img src="docs/img/ksfromcodetodeploy.png" alt="Places you can use Kubescape: in your IDE, CI, CD, or against a running cluster.">
+</div>
 
-## Flags
+## Under the hood
 
-| flag |  default | description | options |
-| --- | --- | --- | --- |
-| `-e`/`--exclude-namespaces` | Scan all namespaces | Namespaces to exclude from scanning. Recommended to exclude `kube-system` and `kube-public` namespaces |
-| `-s`/`--silent` | Display progress messages | Silent progress messages |
-| `-t`/`--fail-threshold` | `0` (do not fail) | fail command (return exit code 1) if result bellow threshold| `0` -> `100` |
-| `-f`/`--format` | `pretty-printer` | Output format | `pretty-printer`/`json`/`junit` |
-| `-o`/`--output` | print to stdout | Save scan result in file |
-| `--use-from` | | Load local framework object from specified path. If not used will download latest |
-| `--use-default` | `false` | Load local framework object from default path. If not used will download latest | `true`/`false` |
-| `--exceptions` | | Path to an [exceptions obj](examples/exceptions.json). If not set will download exceptions from Armo management portal |
-| `--submit` | `false` | If set, Kubescape will send the scan results to Armo management portal where you can see the results in a user-friendly UI, choose your preferred compliance framework, check risk results history and trends, manage exceptions, get remediation recommendations and much more. By default the results are not sent | `true`/`false`|
-| `--keep-local` | `false` | Kubescape will not send scan results to Armo management portal. Use this flag if you ran with the `--submit` flag in the past and you do not want to submit your current scan results | `true`/`false`|
-| `--account` | | Armo portal account ID. Default will load account ID from configMap or config file | |
+Kubescape uses [Open Policy Agent](https://github.com/open-policy-agent/opa) to verify Kubernetes objects against [a library of posture controls](https://github.com/kubescape/regolibrary).
 
-## Usage & Examples
+By default, the results are printed in a console-friendly manner, but they can be:
 
-### Examples
+* exported to JSON or junit XML
+* rendered to HTML or PDF
+* submitted to a [cloud service](docs/providers.md)
 
-* Scan a running Kubernetes cluster with [`nsa`](https://www.nsa.gov/News-Features/Feature-Stories/Article-View/Article/2716980/nsa-cisa-release-kubernetes-hardening-guidance/) framework and submit results to [ARMO portal](https://portal.armo.cloud/)
-```
-kubescape scan framework nsa --submit
-```
+It retrieves Kubernetes objects from the API server and runs a set of [Rego snippets](https://www.openpolicyagent.org/docs/latest/policy-language/) developed by [ARMO](https://www.armosec.io?utm_source=github&utm_medium=repository).
 
+## Community
 
-* Scan a running Kubernetes cluster with [`MITRE ATT&CK®`](https://www.microsoft.com/security/blog/2021/03/23/secure-containerized-environments-with-updated-threat-matrix-for-kubernetes/) framework and submit results to [ARMO portal](https://portal.armo.cloud/)
-```
-kubescape scan framework mitre --submit
-```
+Kubescape is an open source project, we welcome your feedback and ideas for improvement. We are part of the Kubernetes community and are building more tests and controls as the ecosystem develops.
 
+We hold [community meetings](https://zoom.us/j/95174063585) on Zoom, on the first Tuesday of every month, at 14:00 GMT. ([See that in your local time zone](https://time.is/compare/1400_in_GMT)).
 
-* Scan a running Kubernetes cluster with a specific control using the control name or control ID. [List of controls](https://hub.armo.cloud/docs/controls) 
-```
-kubescape scan control "Privileged container"
-```
+The Kubescape project follows the [CNCF Code of Conduct](https://github.com/cncf/foundation/blob/master/code-of-conduct.md).
 
-* Scan local `yaml`/`json` files before deploying. [Take a look at the demonstration](https://youtu.be/Ox6DaR7_4ZI)
-```
-kubescape scan framework nsa *.yaml
-```
+## Contributions 
 
+Thanks to all our contributors!  Check out our [CONTRIBUTING](CONTRIBUTING.md) file to learn how to join them.
 
-* Scan kubernetes manifest files from a public github repository 
-```
-kubescape scan framework nsa https://github.com/armosec/kubescape
-```
+* Feel free to pick a task from the [issues](https://github.com/kubescape/kubescape/issues?q=is%3Aissue+is%3Aopen+label%3A%22open+for+contribution%22), [roadmap](docs/roadmap.md) or suggest a feature of your own.
+* [Open an issue](https://github.com/kubescape/kubescape/issues/new/choose): we aim to respond to all issues within 48 hours.
+* [Join the CNCF Slack](https://slack.cncf.io/) and then our [users](https://cloud-native.slack.com/archives/C04EY3ZF9GE) or [developers](https://cloud-native.slack.com/archives/C04GY6H082K) channel.
 
-* Output in `json` format
-```
-kubescape scan framework nsa --exclude-namespaces kube-system,kube-public --format json --output results.json
-```
+<br>
 
-* Output in `junit xml` format
-```
-kubescape scan framework nsa --exclude-namespaces kube-system,kube-public --format junit --output results.xml
-```
+<a href = "https://github.com/kubescape/kubescape/graphs/contributors">
+  <img src = "https://contrib.rocks/image?repo=kubescape/kubescape"/>
+</a>
 
-* Scan with exceptions, objects with exceptions will be presented as `exclude` and not `fail`
-```
-kubescape scan framework nsa --exceptions examples/exceptions.json
-```
+## License
 
-### Helm Support
+Copyright 2021-2023, the Kubescape Authors. All rights reserved. Kubescape is released under the Apache 2.0 license. See the [LICENSE](LICENSE) file for details.
 
-* Render the helm chart using [`helm template`](https://helm.sh/docs/helm/helm_template/) and pass to stdout
-```
-helm template [NAME] [CHART] [flags] --dry-run | kubescape scan framework nsa -
-```
+Kubescape is a [Cloud Native Computing Foundation (CNCF) sandbox project](https://www.cncf.io/sandbox-projects/) and was contributed by [ARMO](https://www.armosec.io/?utm_source=github&utm_medium=repository).
 
-for example:
-```
-helm template bitnami/mysql --generate-name --dry-run | kubescape scan framework nsa -
-```
-### Offline Support
-
-It is possible to run Kubescape offline!
-
-First download the framework and then scan with `--use-from` flag
-
-1. Download and save in file, if file name not specified, will store save to `~/.kubescape/<framework name>.json`
-```
-kubescape download framework nsa --output nsa.json
-```
-
-2. Scan using the downloaded framework
-```
-kubescape scan framework nsa --use-from nsa.json
-```
-
-Kubescape is an open source project, we welcome your feedback and ideas for improvement. We’re also aiming to collaborate with the Kubernetes community to help make the tests themselves more robust and complete as Kubernetes develops.
-
-# How to build
-
-## Build using python (3.7^) script
-
-Kubescpae can be built using:
-
-``` sh
-python build.py
-```
-
-Note: In order to built using the above script, one must set the environment
-variables in this script:
-
-+ RELEASE
-+ ArmoBEServer
-+ ArmoERServer
-+ ArmoWebsite
-
-
-## Build using go
-
-Note: development (and the release process) is done with Go `1.17`
-
-1. Clone Project
-```
-git clone https://github.com/armosec/kubescape.git kubescape && cd "$_"
-```
-
-2. Build
-```
-go build -o kubescape .
-```
-
-3. Run
-```
-./kubescape scan framework nsa
-```
-
-4. Enjoy :zany_face:
-
-## Docker Support
-
-### Official Docker image
-```
-quay.io/armosec/kubescape
-```
-### Build your own Docker image
-
-1. Clone Project
-```
-git clone https://github.com/armosec/kubescape.git kubescape && cd "$_"
-```
-
-2. Build
-```
-docker build -t kubescape -f build/Dockerfile .
-```
-
-# Under the hood
-
-## Tests
-Kubescape is running the following tests according to what is defined by [Kubernetes Hardening Guidance by NSA and CISA](https://www.nsa.gov/News-Features/Feature-Stories/Article-View/Article/2716980/nsa-cisa-release-kubernetes-hardening-guidance/)
-* Non-root containers
-* Immutable container filesystem
-* Privileged containers
-* hostPID, hostIPC privileges
-* hostNetwork access
-* allowedHostPaths field
-* Protecting pod service account tokens
-* Resource policies
-* Control plane hardening
-* Exposed dashboard
-* Allow privilege escalation
-* Applications credentials in configuration files
-* Cluster-admin binding
-* Exec into container
-* Dangerous capabilities
-* Insecure capabilities
-* Linux hardening
-* Ingress and Egress blocked
-* Container hostPort
-* Network policies
-* Symlink Exchange Can Allow Host Filesystem Access (CVE-2021-25741)
-
-
-
-## Technology
-Kubescape based on OPA engine: https://github.com/open-policy-agent/opa and ARMO's posture controls.
-
-The tools retrieves Kubernetes objects from the API server and runs a set of [regos snippets](https://www.openpolicyagent.org/docs/latest/policy-language/) developed by [ARMO](https://www.armosec.io/).
-
-The results by default printed in a pretty "console friendly" manner, but they can be retrieved in JSON format for further processing.
-
-Kubescape is an open source project, we welcome your feedback and ideas for improvement. We’re also aiming to collaborate with the Kubernetes community to help make the tests themselves more robust and complete as Kubernetes develops.
+<div align="center">
+    <img src="https://raw.githubusercontent.com/cncf/artwork/master/other/cncf-sandbox/horizontal/color/cncf-sandbox-horizontal-color.svg" width="300" alt="CNCF Sandbox Project">
+</div>
