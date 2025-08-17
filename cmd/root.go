@@ -1,25 +1,30 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
-	logger "github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
-	"github.com/kubescape/kubescape/v2/cmd/completion"
-	"github.com/kubescape/kubescape/v2/cmd/config"
-	"github.com/kubescape/kubescape/v2/cmd/download"
-	"github.com/kubescape/kubescape/v2/cmd/fix"
-	"github.com/kubescape/kubescape/v2/cmd/list"
-	"github.com/kubescape/kubescape/v2/cmd/scan"
-	"github.com/kubescape/kubescape/v2/cmd/update"
-	"github.com/kubescape/kubescape/v2/cmd/version"
-	"github.com/kubescape/kubescape/v2/core/cautils"
-	"github.com/kubescape/kubescape/v2/core/cautils/getter"
-	"github.com/kubescape/kubescape/v2/core/core"
-	"github.com/kubescape/kubescape/v2/core/meta"
-
+	"github.com/kubescape/kubescape/v3/cmd/completion"
+	"github.com/kubescape/kubescape/v3/cmd/config"
+	"github.com/kubescape/kubescape/v3/cmd/download"
+	"github.com/kubescape/kubescape/v3/cmd/fix"
+	"github.com/kubescape/kubescape/v3/cmd/list"
+	"github.com/kubescape/kubescape/v3/cmd/mcpserver"
+	"github.com/kubescape/kubescape/v3/cmd/operator"
+	"github.com/kubescape/kubescape/v3/cmd/patch"
+	"github.com/kubescape/kubescape/v3/cmd/prerequisites"
+	"github.com/kubescape/kubescape/v3/cmd/scan"
+	"github.com/kubescape/kubescape/v3/cmd/update"
+	"github.com/kubescape/kubescape/v3/cmd/vap"
+	"github.com/kubescape/kubescape/v3/cmd/version"
+	"github.com/kubescape/kubescape/v3/core/cautils"
+	"github.com/kubescape/kubescape/v3/core/cautils/getter"
+	"github.com/kubescape/kubescape/v3/core/core"
+	"github.com/kubescape/kubescape/v3/core/meta"
 	"github.com/spf13/cobra"
 )
 
@@ -39,8 +44,8 @@ var ksExamples = fmt.Sprintf(`
   %[1]s config view
 `, cautils.ExecName())
 
-func NewDefaultKubescapeCommand() *cobra.Command {
-	ks := core.NewKubescape()
+func NewDefaultKubescapeCommand(ctx context.Context) *cobra.Command {
+	ks := core.NewKubescape(ctx)
 	return getRootCmd(ks)
 }
 
@@ -48,7 +53,7 @@ func getRootCmd(ks meta.IKubescape) *cobra.Command {
 
 	rootCmd := &cobra.Command{
 		Use:     "kubescape",
-		Short:   "Kubescape is a tool for testing Kubernetes security posture. Docs: https://hub.armosec.io/docs",
+		Short:   "Kubescape is a tool for testing Kubernetes security posture. Docs: https://kubescape.io/docs/",
 		Example: ksExamples,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			k8sinterface.SetClusterContextName(rootInfo.KubeContext)
@@ -81,8 +86,6 @@ func getRootCmd(ks meta.IKubescape) *cobra.Command {
 
 	rootCmd.PersistentFlags().StringVarP(&rootInfo.Logger, "logger", "l", helpers.InfoLevel.String(), fmt.Sprintf("Logger level. Supported: %s [$KS_LOGGER]", strings.Join(helpers.SupportedLevels(), "/")))
 	rootCmd.PersistentFlags().StringVar(&rootInfo.CacheDir, "cache-dir", getter.DefaultLocalStore, "Cache directory [$KS_CACHE_DIR]")
-	rootCmd.PersistentFlags().BoolVarP(&rootInfo.DisableColor, "disable-color", "", false, "Disable color output for logging")
-	rootCmd.PersistentFlags().BoolVarP(&rootInfo.EnableColor, "enable-color", "", false, "Force enable color output for logging")
 
 	rootCmd.PersistentFlags().StringVarP(&rootInfo.KubeContext, "kube-context", "", "", "Kube context. Default will use the current-context")
 	// Supported commands
@@ -90,10 +93,15 @@ func getRootCmd(ks meta.IKubescape) *cobra.Command {
 	rootCmd.AddCommand(download.GetDownloadCmd(ks))
 	rootCmd.AddCommand(list.GetListCmd(ks))
 	rootCmd.AddCommand(completion.GetCompletionCmd())
-	rootCmd.AddCommand(version.GetVersionCmd())
+	rootCmd.AddCommand(version.GetVersionCmd(ks))
 	rootCmd.AddCommand(config.GetConfigCmd(ks))
-	rootCmd.AddCommand(update.GetUpdateCmd())
+	rootCmd.AddCommand(update.GetUpdateCmd(ks))
 	rootCmd.AddCommand(fix.GetFixCmd(ks))
+	rootCmd.AddCommand(patch.GetPatchCmd(ks))
+	rootCmd.AddCommand(vap.GetVapHelperCmd())
+	rootCmd.AddCommand(operator.GetOperatorCmd(ks))
+	rootCmd.AddCommand(prerequisites.GetPreReqCmd(ks))
+	rootCmd.AddCommand(mcpserver.GetMCPServerCmd())
 
 	// deprecated commands
 	rootCmd.AddCommand(&cobra.Command{
@@ -108,7 +116,7 @@ func getRootCmd(ks meta.IKubescape) *cobra.Command {
 	return rootCmd
 }
 
-func Execute() error {
-	ks := NewDefaultKubescapeCommand()
+func Execute(ctx context.Context) error {
+	ks := NewDefaultKubescapeCommand(ctx)
 	return ks.Execute()
 }

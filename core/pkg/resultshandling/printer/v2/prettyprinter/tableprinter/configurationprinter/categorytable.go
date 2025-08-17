@@ -4,20 +4,20 @@ import (
 	"io"
 
 	"github.com/jwalton/gchalk"
-	"github.com/kubescape/kubescape/v2/core/cautils"
-	"github.com/kubescape/kubescape/v2/core/pkg/resultshandling/printer/v2/prettyprinter/tableprinter/utils"
+	"github.com/kubescape/kubescape/v3/core/cautils"
+	"github.com/kubescape/kubescape/v3/core/pkg/resultshandling/printer/v2/prettyprinter/tableprinter/utils"
 	"github.com/kubescape/opa-utils/reporthandling/results/v1/reportsummary"
 	"github.com/olekukonko/tablewriter"
 )
 
 const (
-	docsPrefix        = "https://hub.armosec.io/docs"
+	docsPrefix        = "https://kubescape.io/docs"
 	scanControlPrefix = "$ kubescape scan control"
-	controlNameHeader = "Control Name"
+	controlNameHeader = "Control name"
 	statusHeader      = ""
 	docsHeader        = "Docs"
 	resourcesHeader   = "Resources"
-	runHeader         = "View Details"
+	runHeader         = "View details"
 )
 
 // initializes the table headers and column alignments based on the category type
@@ -91,14 +91,15 @@ func getCategoryTableWriter(writer io.Writer, headers []string, columnAligments 
 	table.SetUnicodeHVC(tablewriter.Regular, tablewriter.Regular, gchalk.Ansi256(238))
 	var headerColors []tablewriter.Colors
 	for range headers {
-		headerColors = append(headerColors, tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiYellowColor})
+		headerColors = append(headerColors, tablewriter.Colors{tablewriter.FgHiYellowColor})
 	}
 	table.SetHeaderColor(headerColors...)
 	return table
 }
 
 func renderSingleCategory(writer io.Writer, categoryName string, table *tablewriter.Table, rows [][]string, infoToPrintInfo []utils.InfoStars) {
-	cautils.InfoTextDisplay(writer, categoryName+"\n")
+
+	cautils.InfoDisplay(writer, categoryName+"\n")
 
 	table.ClearRows()
 	table.AppendBulk(rows)

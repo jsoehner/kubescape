@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 
-	logger "github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
-	"github.com/kubescape/kubescape/v2/core/cautils"
-	"github.com/kubescape/kubescape/v2/core/pkg/resultshandling/printer"
-	printerv1 "github.com/kubescape/kubescape/v2/core/pkg/resultshandling/printer/v1"
-	printerv2 "github.com/kubescape/kubescape/v2/core/pkg/resultshandling/printer/v2"
-	"github.com/kubescape/kubescape/v2/core/pkg/resultshandling/reporter"
+	"github.com/kubescape/kubescape/v3/core/cautils"
+	"github.com/kubescape/kubescape/v3/core/pkg/resultshandling/printer"
+	printerv1 "github.com/kubescape/kubescape/v3/core/pkg/resultshandling/printer/v1"
+	printerv2 "github.com/kubescape/kubescape/v3/core/pkg/resultshandling/printer/v2"
+	"github.com/kubescape/kubescape/v3/core/pkg/resultshandling/reporter"
 	reporthandlingv2 "github.com/kubescape/opa-utils/reporthandling/v2"
 )
 
@@ -54,7 +54,7 @@ func (rh *ResultsHandler) SetData(data *cautils.OPASessionObj) {
 	rh.ScanData = data
 }
 
-// GetPrinter returns all printers
+// GetPrinters returns all printers
 func (rh *ResultsHandler) GetPrinters() []printer.IPrinter {
 	return rh.PrinterObjs
 }
@@ -75,7 +75,7 @@ func (rh *ResultsHandler) GetResults() *reporthandlingv2.PostureReport {
 }
 
 // HandleResults handles all necessary actions for the scan results
-func (rh *ResultsHandler) HandleResults(ctx context.Context) error {
+func (rh *ResultsHandler) HandleResults(ctx context.Context, scanInfo *cautils.ScanInfo) error {
 	// Display scan results in the UI first to give immediate value.
 
 	rh.UiPrinter.ActionPrint(ctx, rh.ScanData, rh.ImageScanData)
@@ -92,7 +92,7 @@ func (rh *ResultsHandler) HandleResults(ctx context.Context) error {
 
 	// We should submit only after printing results, so a user can see
 	// results at all times, even if submission fails
-	if rh.ReporterObj != nil {
+	if rh.ReporterObj != nil && scanInfo.Submit {
 		if err := rh.ReporterObj.Submit(ctx, rh.ScanData); err != nil {
 			return err
 		}
@@ -103,11 +103,11 @@ func (rh *ResultsHandler) HandleResults(ctx context.Context) error {
 }
 
 // NewPrinter returns a new printer for a given format and configuration options
-func NewPrinter(ctx context.Context, printFormat, formatVersion string, verboseMode, attackTree bool, viewType cautils.ViewTypes, clusterName string) printer.IPrinter {
+func NewPrinter(ctx context.Context, printFormat string, scanInfo *cautils.ScanInfo, clusterName string) printer.IPrinter {
 
 	switch printFormat {
 	case printer.JsonFormat:
-		switch formatVersion {
+		switch scanInfo.FormatVersion {
 		case "v1":
 			logger.L().Ctx(ctx).Warning("Deprecated format version", helpers.String("run", "--format-version=v2"))
 			return printerv1.NewJsonPrinter()
@@ -115,9 +115,9 @@ func NewPrinter(ctx context.Context, printFormat, formatVersion string, verboseM
 			return printerv2.NewJsonPrinter()
 		}
 	case printer.JunitResultFormat:
-		return printerv2.NewJunitPrinter(verboseMode)
+		return printerv2.NewJunitPrinter(scanInfo.VerboseMode)
 	case printer.PrometheusFormat:
-		return printerv2.NewPrometheusPrinter(verboseMode)
+		return printerv2.NewPrometheusPrinter(scanInfo.VerboseMode)
 	case printer.PdfFormat:
 		return printerv2.NewPdfPrinter()
 	case printer.HtmlFormat:
@@ -128,7 +128,7 @@ func NewPrinter(ctx context.Context, printFormat, formatVersion string, verboseM
 		if printFormat != printer.PrettyFormat {
 			logger.L().Ctx(ctx).Warning(fmt.Sprintf("Invalid format \"%s\", default format \"pretty-printer\" is applied", printFormat))
 		}
-		return printerv2.NewPrettyPrinter(verboseMode, formatVersion, attackTree, viewType, "", nil, clusterName)
+		return printerv2.NewPrettyPrinter(scanInfo.VerboseMode, scanInfo.FormatVersion, scanInfo.PrintAttackTree, cautils.ViewTypes(scanInfo.View), scanInfo.ScanType, scanInfo.InputPatterns, clusterName)
 	}
 }
 
@@ -146,7 +146,7 @@ func ValidatePrinter(scanType cautils.ScanTypes, scanContext cautils.ScanningCon
 	if printFormat == printer.SARIFFormat {
 		// supported types for SARIF
 		switch scanContext {
-		case cautils.ContextDir, cautils.ContextFile, cautils.ContextGitLocal:
+		case cautils.ContextDir, cautils.ContextFile, cautils.ContextGitLocal, cautils.ContextGitRemote:
 			return nil
 		default:
 			return fmt.Errorf("format \"%s\" is only supported when scanning local files", printFormat)

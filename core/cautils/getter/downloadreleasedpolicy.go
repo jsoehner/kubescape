@@ -5,11 +5,9 @@ import (
 	"strings"
 
 	"github.com/armosec/armoapi-go/armotypes"
-
 	"github.com/kubescape/opa-utils/reporthandling"
 	"github.com/kubescape/opa-utils/reporthandling/attacktrack/v1alpha1"
-
-	"github.com/kubescape/regolibrary/gitregostore"
+	"github.com/kubescape/regolibrary/v2/gitregostore"
 )
 
 // =======================================================================================================================
@@ -29,7 +27,7 @@ type DownloadReleasedPolicy struct {
 
 func NewDownloadReleasedPolicy() *DownloadReleasedPolicy {
 	return &DownloadReleasedPolicy{
-		gs: gitregostore.NewDefaultGitRegoStore(-1),
+		gs: gitregostore.NewGitRegoStoreV2(-1),
 	}
 }
 

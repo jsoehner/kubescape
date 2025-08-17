@@ -2,17 +2,18 @@ package scan
 
 import (
 	"context"
-
-	"github.com/kubescape/go-logger/helpers"
-
-	"github.com/kubescape/kubescape/v2/core/cautils"
-	v1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
-	"github.com/kubescape/opa-utils/reporthandling/apis"
-	"github.com/kubescape/opa-utils/reporthandling/results/v1/reportsummary"
-
 	"os"
 	"reflect"
 	"testing"
+
+	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/kubescape/v3/cmd/shared"
+	"github.com/kubescape/kubescape/v3/core/cautils"
+	"github.com/kubescape/kubescape/v3/core/mocks"
+	v1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
+	"github.com/kubescape/opa-utils/reporthandling/apis"
+	"github.com/kubescape/opa-utils/reporthandling/results/v1/reportsummary"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestExceedsSeverity(t *testing.T) {
@@ -112,7 +113,7 @@ func TestExceedsSeverity(t *testing.T) {
 			ScanInfo:         &cautils.ScanInfo{FailThresholdSeverity: "unknown"},
 			SeverityCounters: &reportsummary.SeverityCounters{LowSeverityCounter: 1},
 			Want:             false,
-			Error:            ErrUnknownSeverity,
+			Error:            shared.ErrUnknownSeverity,
 		},
 	}
 
@@ -213,7 +214,7 @@ func (l *spyLogger) GetSpiedItems() []spyLogMessage {
 }
 
 func Test_terminateOnExceedingSeverity(t *testing.T) {
-	expectedMessage := "result exceeds severity threshold"
+	expectedMessage := "compliance result exceeds severity threshold"
 	expectedKey := "set severity threshold"
 
 	testCases := []struct {
@@ -302,15 +303,11 @@ func TestSetSecurityViewScanInfo(t *testing.T) {
 				PolicyIdentifier: []cautils.PolicyIdentifier{
 					{
 						Kind:       v1.KindFramework,
-						Identifier: "clusterscan",
+						Identifier: "workloadscan",
 					},
 					{
 						Kind:       v1.KindFramework,
-						Identifier: "mitre",
-					},
-					{
-						Kind:       v1.KindFramework,
-						Identifier: "nsa",
+						Identifier: "allcontrols",
 					},
 				},
 			},
@@ -360,4 +357,17 @@ func TestSetSecurityViewScanInfo(t *testing.T) {
 		})
 	}
 
+}
+
+func TestGetScanCommand(t *testing.T) {
+	// Create a mock Kubescape interface
+	mockKubescape := &mocks.MockIKubescape{}
+
+	cmd := GetScanCommand(mockKubescape)
+
+	// Verify the command name and short description
+	assert.Equal(t, "scan", cmd.Use)
+	assert.Equal(t, "Scan a Kubernetes cluster or YAML files for image vulnerabilities and misconfigurations", cmd.Short)
+	assert.Equal(t, "The action you want to perform", cmd.Long)
+	assert.Equal(t, scanCmdExamples, cmd.Example)
 }

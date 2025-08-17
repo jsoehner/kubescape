@@ -4,29 +4,28 @@ import (
 	"context"
 	"fmt"
 
-	logger "github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	cloudsupportv1 "github.com/kubescape/k8s-interface/cloudsupport/v1"
 	"github.com/kubescape/k8s-interface/k8sinterface"
-	"github.com/kubescape/kubescape/v2/core/cautils"
-	"github.com/kubescape/kubescape/v2/core/pkg/opaprocessor"
+	"github.com/kubescape/kubescape/v3/core/cautils"
 	"github.com/kubescape/opa-utils/reporthandling/apis"
 	helpersv1 "github.com/kubescape/opa-utils/reporthandling/helpers/v1"
 	reportv2 "github.com/kubescape/opa-utils/reporthandling/v2"
 	"go.opentelemetry.io/otel"
 )
 
-func CollectResources(ctx context.Context, rsrcHandler IResourceHandler, policyIdentifier []cautils.PolicyIdentifier, opaSessionObj *cautils.OPASessionObj, progressListener opaprocessor.IJobProgressNotificationClient, scanInfo *cautils.ScanInfo) error {
+func CollectResources(ctx context.Context, rsrcHandler IResourceHandler, opaSessionObj *cautils.OPASessionObj, scanInfo *cautils.ScanInfo) error {
 	ctx, span := otel.Tracer("").Start(ctx, "resourcehandler.CollectResources")
 	defer span.End()
 	opaSessionObj.Report.ClusterAPIServerInfo = rsrcHandler.GetClusterAPIServerInfo(ctx)
 
 	// set cloud metadata only when scanning a cluster
-	if opaSessionObj.Metadata.ScanMetadata.ScanningTarget == reportv2.Cluster {
-		setCloudMetadata(opaSessionObj)
+	if rsrcHandler.GetCloudProvider() != "" {
+		setCloudMetadata(opaSessionObj, rsrcHandler.GetCloudProvider())
 	}
 
-	resourcesMap, allResources, externalResources, excludedRulesMap, err := rsrcHandler.GetResources(ctx, opaSessionObj, progressListener, scanInfo)
+	resourcesMap, allResources, externalResources, excludedRulesMap, err := rsrcHandler.GetResources(ctx, opaSessionObj, scanInfo)
 	if err != nil {
 		return err
 	}
@@ -36,15 +35,15 @@ func CollectResources(ctx context.Context, rsrcHandler IResourceHandler, policyI
 	opaSessionObj.ExternalResources = externalResources
 	opaSessionObj.ExcludedRules = excludedRulesMap
 
-	if (opaSessionObj.K8SResources == nil || len(opaSessionObj.K8SResources) == 0) && (opaSessionObj.ExternalResources == nil || len(opaSessionObj.ExternalResources) == 0) {
-		return fmt.Errorf("empty list of resources")
+	if (opaSessionObj.K8SResources == nil || len(opaSessionObj.K8SResources) == 0) && (opaSessionObj.ExternalResources == nil || len(opaSessionObj.ExternalResources) == 0) || len(opaSessionObj.AllResources) == 0 {
+		return fmt.Errorf("no resources found to scan")
 	}
 
 	return nil
 }
 
-func setCloudMetadata(opaSessionObj *cautils.OPASessionObj) {
-	iCloudMetadata := getCloudMetadata(opaSessionObj)
+func setCloudMetadata(opaSessionObj *cautils.OPASessionObj, provider string) {
+	iCloudMetadata := newCloudMetadata(provider)
 	if iCloudMetadata == nil {
 		return
 	}
@@ -64,8 +63,8 @@ func setCloudMetadata(opaSessionObj *cautils.OPASessionObj) {
 // 1. Get cloud provider from API server git version (EKS, GKE)
 // 2. Get cloud provider from kubeconfig by parsing the cluster context (EKS, GKE)
 // 3. Get cloud provider from kubeconfig by parsing the server URL (AKS)
-func getCloudMetadata(opaSessionObj *cautils.OPASessionObj) apis.ICloudParser {
-	switch cloudsupportv1.GetCloudProvider() {
+func newCloudMetadata(provider string) apis.ICloudParser {
+	switch provider {
 	case cloudsupportv1.AKS:
 		return helpersv1.NewAKSMetadata(k8sinterface.GetContextName())
 	case cloudsupportv1.EKS:

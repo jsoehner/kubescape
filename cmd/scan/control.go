@@ -1,19 +1,17 @@
 package scan
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
-	apisv1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
-
-	logger "github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
-	"github.com/kubescape/kubescape/v2/core/cautils"
-	"github.com/kubescape/kubescape/v2/core/meta"
-
+	"github.com/kubescape/kubescape/v3/cmd/shared"
+	"github.com/kubescape/kubescape/v3/core/cautils"
+	"github.com/kubescape/kubescape/v3/core/meta"
+	apisv1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
 	"github.com/spf13/cobra"
 )
 
@@ -31,7 +29,7 @@ var (
   Run '%[1]s list controls' for the list of supported controls
   
   Control documentation:
-  https://hub.armosec.io/docs/controls
+  https://kubescape.io/docs/controls/
 `, cautils.ExecName())
 )
 
@@ -97,12 +95,11 @@ func getControlCmd(ks meta.IKubescape, scanInfo *cautils.ScanInfo) *cobra.Comman
 				return err
 			}
 
-			ctx := context.TODO()
-			results, err := ks.Scan(ctx, scanInfo)
+			results, err := ks.Scan(scanInfo)
 			if err != nil {
 				logger.L().Fatal(err.Error())
 			}
-			if err := results.HandleResults(ctx); err != nil {
+			if err := results.HandleResults(ks.Context(), scanInfo); err != nil {
 				logger.L().Fatal(err.Error())
 			}
 			if !scanInfo.VerboseMode {
@@ -129,7 +126,7 @@ func validateControlScanInfo(scanInfo *cautils.ScanInfo) error {
 		return fmt.Errorf("you can use `omit-raw-resources` or `submit`, but not both")
 	}
 
-	if err := validateSeverity(severity); severity != "" && err != nil {
+	if err := shared.ValidateSeverity(severity); severity != "" && err != nil {
 		return err
 	}
 	return nil

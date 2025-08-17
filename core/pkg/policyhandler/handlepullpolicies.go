@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/armosec/armoapi-go/armotypes"
-	logger "github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
-	"github.com/kubescape/kubescape/v2/core/cautils"
-	"github.com/kubescape/kubescape/v2/core/cautils/getter"
+	"github.com/kubescape/kubescape/v3/core/cautils"
+	"github.com/kubescape/kubescape/v3/core/cautils/getter"
 	apisv1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
 	"github.com/kubescape/opa-utils/reporthandling"
 	"go.opentelemetry.io/otel"
@@ -70,7 +70,7 @@ func (policyHandler *PolicyHandler) getPolicies(ctx context.Context, policyIdent
 	ctx, span := otel.Tracer("").Start(ctx, "policyHandler.getPolicies")
 	defer span.End()
 
-	logger.L().Start("Loading policies")
+	logger.L().Start("Loading policies...")
 
 	// get policies
 	policies, err = policyHandler.getScanPolicies(ctx, policyIdentifier)
@@ -82,7 +82,7 @@ func (policyHandler *PolicyHandler) getPolicies(ctx context.Context, policyIdent
 	}
 
 	logger.L().StopSuccess("Loaded policies")
-	logger.L().Start("Loading exceptions")
+	logger.L().Start("Loading exceptions...")
 
 	// get exceptions
 	if exceptions, err = policyHandler.getExceptions(); err != nil {
@@ -90,7 +90,7 @@ func (policyHandler *PolicyHandler) getPolicies(ctx context.Context, policyIdent
 	}
 
 	logger.L().StopSuccess("Loaded exceptions")
-	logger.L().Start("Loading account configurations")
+	logger.L().Start("Loading account configurations...")
 
 	// get account configuration
 	if controlInputs, err = policyHandler.getControlInputs(); err != nil {
@@ -150,7 +150,7 @@ func (policyHandler *PolicyHandler) downloadScanPolicies(ctx context.Context, po
 			logger.L().Debug("Downloading framework", helpers.String("framework", rule.Identifier))
 			receivedFramework, err := policyHandler.getters.PolicyGetter.GetFramework(rule.Identifier)
 			if err != nil {
-				return frameworks, policyDownloadError(err)
+				return frameworks, frameworkDownloadError(err, rule.Identifier)
 			}
 			if err := validateFramework(receivedFramework); err != nil {
 				return frameworks, err
@@ -158,8 +158,11 @@ func (policyHandler *PolicyHandler) downloadScanPolicies(ctx context.Context, po
 			if receivedFramework != nil {
 				frameworks = append(frameworks, *receivedFramework)
 				cache := getter.GetDefaultPath(rule.Identifier + ".json")
+				if _, ok := policyHandler.getters.PolicyGetter.(*getter.LoadPolicy); ok {
+					continue // skip caching for local files
+				}
 				if err := getter.SaveInFile(receivedFramework, cache); err != nil {
-					logger.L().Ctx(ctx).Warning("failed to cache file", helpers.String("file", cache), helpers.Error(err))
+					logger.L().Ctx(ctx).Warning("failed to cache framework", helpers.String("file", cache), helpers.Error(err))
 				}
 			}
 		}
@@ -171,14 +174,14 @@ func (policyHandler *PolicyHandler) downloadScanPolicies(ctx context.Context, po
 			logger.L().Debug("Downloading control", helpers.String("control", policy.Identifier))
 			receivedControl, err = policyHandler.getters.PolicyGetter.GetControl(policy.Identifier)
 			if err != nil {
-				return frameworks, policyDownloadError(err)
+				return frameworks, controlDownloadError(err, policy.Identifier)
 			}
 			if receivedControl != nil {
 				f.Controls = append(f.Controls, *receivedControl)
 
 				cache := getter.GetDefaultPath(policy.Identifier + ".json")
 				if err := getter.SaveInFile(receivedControl, cache); err != nil {
-					logger.L().Ctx(ctx).Warning("failed to cache file", helpers.String("file", cache), helpers.Error(err))
+					logger.L().Ctx(ctx).Warning("failed to cache control", helpers.String("file", cache), helpers.Error(err))
 				}
 			}
 		}

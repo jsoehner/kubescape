@@ -1,14 +1,12 @@
 package fix
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
-	"github.com/kubescape/kubescape/v2/core/cautils"
-	"github.com/kubescape/kubescape/v2/core/meta"
-	metav1 "github.com/kubescape/kubescape/v2/core/meta/datastructures/v1"
-
+	"github.com/kubescape/kubescape/v3/core/cautils"
+	"github.com/kubescape/kubescape/v3/core/meta"
+	metav1 "github.com/kubescape/kubescape/v3/core/meta/datastructures/v1"
 	"github.com/spf13/cobra"
 )
 
@@ -36,7 +34,7 @@ func GetFixCmd(ks meta.IKubescape) *cobra.Command {
 			}
 			fixInfo.ReportFile = args[0]
 
-			return ks.Fix(context.TODO(), &fixInfo)
+			return ks.Fix(&fixInfo)
 		},
 	}
 

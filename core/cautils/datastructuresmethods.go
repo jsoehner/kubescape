@@ -1,12 +1,11 @@
 package cautils
 
 import (
-	"golang.org/x/mod/semver"
-
-	"github.com/armosec/utils-go/boolutils"
-	cloudsupport "github.com/kubescape/k8s-interface/cloudsupport/v1"
+	"github.com/kubescape/backend/pkg/versioncheck"
 	"github.com/kubescape/opa-utils/reporthandling"
 	"github.com/kubescape/opa-utils/reporthandling/apis"
+	reporthandlingv2 "github.com/kubescape/opa-utils/reporthandling/v2"
+	"golang.org/x/mod/semver"
 )
 
 func NewPolicies() *Policies {
@@ -16,7 +15,7 @@ func NewPolicies() *Policies {
 	}
 }
 
-func (policies *Policies) Set(frameworks []reporthandling.Framework, version string, excludedRules map[string]bool, scanningScope reporthandling.ScanningScopeType) {
+func (policies *Policies) Set(frameworks []reporthandling.Framework, excludedRules map[string]bool, scanningScope reporthandling.ScanningScopeType) {
 	for i := range frameworks {
 		if !isFrameworkFitToScanScope(frameworks[i], scanningScope) {
 			continue
@@ -34,9 +33,12 @@ func (policies *Policies) Set(frameworks []reporthandling.Framework, version str
 					}
 				}
 
-				if !ruleWithKSOpaDependency(frameworks[i].Controls[j].Rules[r].Attributes) && isRuleKubescapeVersionCompatible(frameworks[i].Controls[j].Rules[r].Attributes, version) && isControlFitToScanScope(frameworks[i].Controls[j], scanningScope) {
-					compatibleRules = append(compatibleRules, frameworks[i].Controls[j].Rules[r])
+				if ShouldSkipRule(frameworks[i].Controls[j], frameworks[i].Controls[j].Rules[r], scanningScope) {
+					continue
 				}
+				// if isRuleKubescapeVersionCompatible(frameworks[i].Controls[j].Rules[r].Attributes, version) && isControlFitToScanScope(frameworks[i].Controls[j], scanningScope) {
+				compatibleRules = append(compatibleRules, frameworks[i].Controls[j].Rules[r])
+				// }
 			}
 			if len(compatibleRules) > 0 {
 				frameworks[i].Controls[j].Rules = compatibleRules
@@ -56,12 +58,16 @@ func (policies *Policies) Set(frameworks []reporthandling.Framework, version str
 	}
 }
 
-func ruleWithKSOpaDependency(attributes map[string]interface{}) bool {
-	if attributes == nil {
-		return false
+// ShouldSkipRule checks if the rule should be skipped
+// It checks the following:
+//  1. Rule is compatible with the current kubescape version
+//  2. Rule fits the current scanning scope
+func ShouldSkipRule(control reporthandling.Control, rule reporthandling.PolicyRule, scanningScope reporthandling.ScanningScopeType) bool {
+	if !isRuleKubescapeVersionCompatible(rule.Attributes, versioncheck.BuildNumber) {
+		return true
 	}
-	if s, ok := attributes["armoOpa"]; ok { // TODO - make global
-		return boolutils.StringToBool(s.(string))
+	if !isControlFitToScanScope(control, scanningScope) {
+		return true
 	}
 	return false
 }
@@ -71,47 +77,29 @@ func ruleWithKSOpaDependency(attributes map[string]interface{}) bool {
 // returns true only if rule doesn't have the "until" attribute
 func isRuleKubescapeVersionCompatible(attributes map[string]interface{}, version string) bool {
 	if from, ok := attributes["useFromKubescapeVersion"]; ok && from != nil {
-		if version != "" {
-			if semver.Compare(version, from.(string)) == -1 {
+		switch sfrom := from.(type) {
+		case string:
+			if version != "" && semver.Compare(version, sfrom) == -1 {
 				return false
 			}
-		}
-	}
-	if until, ok := attributes["useUntilKubescapeVersion"]; ok && until != nil {
-		if version == "" {
+		default:
+			// Handle case where useFromKubescapeVersion is not a string
 			return false
 		}
-		if semver.Compare(version, until.(string)) >= 0 {
+	}
+
+	if until, ok := attributes["useUntilKubescapeVersion"]; ok && until != nil {
+		switch suntil := until.(type) {
+		case string:
+			if version == "" || semver.Compare(version, suntil) >= 0 {
+				return false
+			}
+		default:
+			// Handle case where useUntilKubescapeVersion is not a string
 			return false
 		}
 	}
 	return true
-}
-
-func getCloudProvider(scanInfo *ScanInfo) reporthandling.ScanningScopeType {
-	if cloudsupport.IsAKS() {
-		return reporthandling.ScopeCloudAKS
-	}
-	if cloudsupport.IsEKS() {
-		return reporthandling.ScopeCloudEKS
-	}
-	if cloudsupport.IsGKE() {
-		return reporthandling.ScopeCloudGKE
-	}
-	return ""
-}
-
-func GetScanningScope(scanInfo *ScanInfo) reporthandling.ScanningScopeType {
-
-	switch scanInfo.GetScanningContext() {
-	case ContextCluster:
-		if cloudProvider := getCloudProvider(scanInfo); cloudProvider != "" {
-			return cloudProvider
-		}
-		return reporthandling.ScopeCluster
-	default:
-		return reporthandling.ScopeFile
-	}
 }
 
 func isScanningScopeMatchToControlScope(scanScope reporthandling.ScanningScopeType, controlScope reporthandling.ScanningScopeType) bool {
@@ -164,4 +152,14 @@ func isFrameworkFitToScanScope(framework reporthandling.Framework, scanScopeMatc
 		}
 	}
 	return false
+}
+
+func GetScanningScope(ContextMetadata reporthandlingv2.ContextMetadata) reporthandling.ScanningScopeType {
+	if ContextMetadata.ClusterContextMetadata != nil {
+		if ContextMetadata.ClusterContextMetadata.CloudMetadata != nil && ContextMetadata.ClusterContextMetadata.CloudMetadata.CloudProvider != "" {
+			return reporthandling.ScanningScopeType(ContextMetadata.ClusterContextMetadata.CloudMetadata.CloudProvider)
+		}
+		return reporthandling.ScopeCluster
+	}
+	return reporthandling.ScopeFile
 }

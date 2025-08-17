@@ -67,6 +67,11 @@ func verify(img string, key string) (bool, error) {
 		return false, fmt.Errorf("resolving attachment type %s for image %s: %w", attachment, img, err)
 	}
 
+	co.RekorPubKeys, err = cosign.GetRekorPubs(context.Background())
+	if err != nil {
+		return false, fmt.Errorf("getting Rekor public keys: %w", err)
+	}
+
 	_, _, err = cosign.VerifyImageSignatures(context.TODO(), ref, co)
 	if err != nil {
 		return false, fmt.Errorf("verifying signature: %w", err)

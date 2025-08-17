@@ -3,19 +3,16 @@ package resourcehandler
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/kubescape/k8s-interface/workloadinterface"
-	"github.com/kubescape/opa-utils/reporthandling"
-	"k8s.io/apimachinery/pkg/version"
-
-	logger "github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
 	"github.com/kubescape/k8s-interface/k8sinterface"
-	"github.com/kubescape/kubescape/v2/core/cautils"
-	"github.com/kubescape/kubescape/v2/core/pkg/opaprocessor"
+	"github.com/kubescape/k8s-interface/workloadinterface"
+	"github.com/kubescape/kubescape/v3/core/cautils"
+	"github.com/kubescape/opa-utils/reporthandling"
+	"k8s.io/apimachinery/pkg/version"
 )
 
 // FileResourceHandler handle resources from files and URLs
@@ -26,7 +23,7 @@ func NewFileResourceHandler() *FileResourceHandler {
 	return &FileResourceHandler{}
 }
 
-func (fileHandler *FileResourceHandler) GetResources(ctx context.Context, sessionObj *cautils.OPASessionObj, progressListener opaprocessor.IJobProgressNotificationClient, scanInfo *cautils.ScanInfo) (cautils.K8SResources, map[string]workloadinterface.IMetadata, cautils.ExternalResources, map[string]bool, error) {
+func (fileHandler *FileResourceHandler) GetResources(ctx context.Context, sessionObj *cautils.OPASessionObj, scanInfo *cautils.ScanInfo) (cautils.K8SResources, map[string]workloadinterface.IMetadata, cautils.ExternalResources, map[string]bool, error) {
 	allResources := map[string]workloadinterface.IMetadata{}
 	externalResources := cautils.ExternalResources{}
 
@@ -34,7 +31,7 @@ func (fileHandler *FileResourceHandler) GetResources(ctx context.Context, sessio
 		return nil, nil, nil, nil, fmt.Errorf("missing input")
 	}
 
-	logger.L().Start("Accessing local objects")
+	logger.L().Start("Accessing local objects...")
 
 	// load resources from all input paths
 	mappedResources := map[string][]workloadinterface.IMetadata{}
@@ -44,7 +41,7 @@ func (fileHandler *FileResourceHandler) GetResources(ctx context.Context, sessio
 		var err error
 
 		if scanInfo.ChartPath != "" && scanInfo.FilePath != "" {
-			workloadIDToSource, workloads, err = getWorkloadFromHelmChart(ctx, scanInfo.ChartPath, scanInfo.FilePath)
+			workloadIDToSource, workloads, _ = getWorkloadFromHelmChart(ctx, scanInfo.InputPatterns[path], scanInfo.ChartPath, scanInfo.FilePath)
 		} else {
 			workloadIDToSource, workloads, err = getResourcesFromPath(ctx, scanInfo.InputPatterns[path])
 			if err != nil {
@@ -52,11 +49,12 @@ func (fileHandler *FileResourceHandler) GetResources(ctx context.Context, sessio
 			}
 		}
 		if len(workloads) == 0 {
-			logger.L().Debug("path ignored because contains only a non-kubernetes file", helpers.String("path", scanInfo.InputPatterns[path]))
+			continue
 		}
 
 		for k, v := range workloadIDToSource {
 			sessionObj.ResourceSource[k] = v
+			sessionObj.TemplateMapping[k] = cautils.MappingNodes{}
 		}
 
 		// map all resources: map["/apiVersion/version/kind"][]<k8s workloads>
@@ -73,15 +71,17 @@ func (fileHandler *FileResourceHandler) GetResources(ctx context.Context, sessio
 		return nil, nil, nil, nil, fmt.Errorf("resource %s has a parent and cannot be scanned", sessionObj.SingleResourceScan.GetID())
 	}
 
+	scanningScope := cautils.GetScanningScope(sessionObj.Metadata.ContextMetadata)
+
 	// build a resources map, based on the policies
 	// map resources based on framework required resources: map["/group/version/kind"][]<k8s workloads ids>
-	resourceToQuery, excludedRulesMap := getQueryableResourceMapFromPolicies(sessionObj.Policies, sessionObj.SingleResourceScan)
+	resourceToQuery, excludedRulesMap := getQueryableResourceMapFromPolicies(sessionObj.Policies, sessionObj.SingleResourceScan, scanningScope)
 	k8sResources := resourceToQuery.ToK8sResourceMap()
 
 	// save only relevant resources
 	for i := range mappedResources {
 		if _, ok := k8sResources[i]; ok {
-			ids := []string{}
+			var ids []string
 			for j := range mappedResources[i] {
 				ids = append(ids, mappedResources[i][j].GetID())
 				allResources[mappedResources[i][j].GetID()] = mappedResources[i][j]
@@ -97,23 +97,24 @@ func (fileHandler *FileResourceHandler) GetResources(ctx context.Context, sessio
 	return k8sResources, allResources, externalResources, excludedRulesMap, nil
 }
 
-func getWorkloadFromHelmChart(ctx context.Context, helmPath, workloadPath string) (map[string]reporthandling.Source, []workloadinterface.IMetadata, error) {
-	clonedRepo, err := cloneGitRepo(&helmPath)
-	if err != nil {
-		return nil, nil, err
-	}
+func (fileHandler *FileResourceHandler) GetCloudProvider() string {
+	return ""
+}
+func getWorkloadFromHelmChart(ctx context.Context, path, helmPath, workloadPath string) (map[string]reporthandling.Source, []workloadinterface.IMetadata, error) {
+	clonedRepo := cautils.GetClonedPath(path)
+
 	if clonedRepo != "" {
-		defer os.RemoveAll(clonedRepo)
+		// if the repo was cloned, add the workload path to the cloned repo
+		workloadPath = filepath.Join(clonedRepo, workloadPath)
+	} else {
+		// if the repo was not cloned
+		clonedRepo = path
 	}
 
 	// Get repo root
-	repoRoot, gitRepo := extractGitRepo(helmPath)
+	repoRoot, gitRepo := extractGitRepo(clonedRepo)
 
 	helmSourceToWorkloads, helmSourceToChart := cautils.LoadResourcesFromHelmCharts(ctx, helmPath)
-
-	if clonedRepo != "" {
-		workloadPath = clonedRepo + workloadPath
-	}
 
 	wlSource, ok := helmSourceToWorkloads[workloadPath]
 	if !ok {
@@ -134,7 +135,7 @@ func getWorkloadFromHelmChart(ctx context.Context, helmPath, workloadPath string
 	workloadIDToSource := make(map[string]reporthandling.Source, 1)
 	workloadIDToSource[wlSource[0].GetID()] = workloadSource
 
-	workloads := []workloadinterface.IMetadata{}
+	var workloads []workloadinterface.IMetadata
 	workloads = append(workloads, wlSource...)
 
 	return workloadIDToSource, workloads, nil
@@ -172,15 +173,13 @@ func getWorkloadSourceHelmChart(repoRoot string, source string, gitRepo *cautils
 }
 
 func getResourcesFromPath(ctx context.Context, path string) (map[string]reporthandling.Source, []workloadinterface.IMetadata, error) {
-	workloadIDToSource := make(map[string]reporthandling.Source, 0)
-	workloads := []workloadinterface.IMetadata{}
+	workloadIDToSource := make(map[string]reporthandling.Source)
+	var workloads []workloadinterface.IMetadata
 
-	clonedRepo, err := cloneGitRepo(&path)
-	if err != nil {
-		return nil, nil, err
-	}
+	clonedRepo := cautils.GetClonedPath(path)
 	if clonedRepo != "" {
-		defer os.RemoveAll(clonedRepo)
+		// if the repo was cloned, add the workload path to the cloned repo
+		path = clonedRepo
 	}
 
 	// Get repo root
@@ -219,7 +218,7 @@ func getResourcesFromPath(ctx context.Context, path string) (map[string]reportha
 		if gitRepo != nil {
 			commitInfo, err := gitRepo.GetFileLastCommit(source)
 			if err != nil && !warnIssued {
-				logger.L().Ctx(ctx).Warning("Git scan skipped", helpers.Error(err))
+				logger.L().Debug("Git scan skipped", helpers.Error(err))
 				warnIssued = true // croak only once
 			}
 
@@ -266,7 +265,7 @@ func getResourcesFromPath(ctx context.Context, path string) (map[string]reportha
 		workloads = append(workloads, ws...)
 		helmChart := helmSourceToChart[source]
 
-		if clonedRepo != "" {
+		if clonedRepo != "" && gitRepo != nil {
 			url, err := gitRepo.GetRemoteUrl()
 			if err != nil {
 				logger.L().Warning("failed to get remote url", helpers.Error(err))
@@ -284,12 +283,13 @@ func getResourcesFromPath(ctx context.Context, path string) (map[string]reportha
 		}
 	}
 
-	if len(helmSourceToWorkloads) > 0 {
+	if len(helmSourceToWorkloads) > 0 { // && len(helmSourceToNodes) > 0
 		logger.L().Debug("helm templates found in local storage", helpers.Int("helmTemplates", len(helmSourceToWorkloads)), helpers.Int("workloads", len(workloads)))
 	}
 
+	//patch, get value from env
 	// Load resources from Kustomize directory
-	kustomizeSourceToWorkloads, kustomizeDirectoryName := cautils.LoadResourcesFromKustomizeDirectory(ctx, path)
+	kustomizeSourceToWorkloads, kustomizeDirectoryName := cautils.LoadResourcesFromKustomizeDirectory(ctx, path) //?
 
 	// update workloads and workloadIDToSource with workloads from Kustomize Directory
 	for source, ws := range kustomizeSourceToWorkloads {

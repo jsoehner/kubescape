@@ -1,7 +1,7 @@
 package reporter
 
 import (
-	"github.com/kubescape/kubescape/v2/core/cautils"
+	"github.com/kubescape/kubescape/v3/core/cautils"
 	reporthandlingv2 "github.com/kubescape/opa-utils/reporthandling/v2"
 )
 
@@ -15,6 +15,7 @@ func (report *ReportEventReceiver) setSubReport(opaSessionObj *cautils.OPASessio
 		Attributes:            opaSessionObj.Report.Attributes,
 		ClusterAPIServerInfo:  opaSessionObj.Report.ClusterAPIServerInfo,
 		CustomerGUIDGenerated: report.accountIdGenerated,
+		TriggeredByCLI:        opaSessionObj.TriggeredByCLI,
 	}
 	if opaSessionObj.Metadata != nil {
 		reportObj.Metadata = *opaSessionObj.Metadata

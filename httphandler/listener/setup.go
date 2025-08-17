@@ -6,14 +6,13 @@ import (
 	"net/http"
 	"os"
 
-	logger "github.com/kubescape/go-logger"
-	"github.com/kubescape/go-logger/helpers"
-	"github.com/kubescape/kubescape/v2/core/cautils"
-	"github.com/kubescape/kubescape/v2/core/metrics"
-	"github.com/kubescape/kubescape/v2/httphandler/docs"
-	handlerequestsv1 "github.com/kubescape/kubescape/v2/httphandler/handlerequests/v1"
-
 	"github.com/gorilla/mux"
+	"github.com/kubescape/backend/pkg/versioncheck"
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger/helpers"
+	"github.com/kubescape/kubescape/v3/core/metrics"
+	"github.com/kubescape/kubescape/v3/httphandler/docs"
+	handlerequestsv1 "github.com/kubescape/kubescape/v3/httphandler/handlerequests/v1"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
 )
 
@@ -32,8 +31,6 @@ const (
 
 // SetupHTTPListener set up listening http servers
 func SetupHTTPListener() error {
-	initialize()
-
 	keyPair, err := loadTLSKey("", "") // TODO - support key and crt files
 	if err != nil {
 		return err
@@ -45,7 +42,7 @@ func SetupHTTPListener() error {
 		server.TLSConfig = &tls.Config{Certificates: []tls.Certificate{*keyPair}}
 	}
 
-	httpHandler := handlerequestsv1.NewHTTPHandler()
+	httpHandler := handlerequestsv1.NewHTTPHandler(getOffline())
 
 	// Setup the OpenAPI UI handler
 	openApiHandler := docs.NewOpenAPIUIHandler()
@@ -61,7 +58,7 @@ func SetupHTTPListener() error {
 	otelMiddleware := otelmux.Middleware("kubescape-svc")
 	v1SubRouter := rtr.PathPrefix(v1PathPrefix).Subrouter()
 	v1SubRouter.Use(otelMiddleware)
-	v1SubRouter.HandleFunc(v1PrometheusMetricsPath, httpHandler.Metrics)
+	v1SubRouter.HandleFunc(v1PrometheusMetricsPath, httpHandler.Metrics) // deprecated
 	v1SubRouter.HandleFunc(v1ScanPath, httpHandler.Scan)
 	v1SubRouter.HandleFunc(v1StatusPath, httpHandler.Status)
 	v1SubRouter.HandleFunc(v1ResultsPath, httpHandler.Results)
@@ -71,7 +68,7 @@ func SetupHTTPListener() error {
 
 	server.Handler = rtr
 
-	logger.L().Info("Started Kubescape server", helpers.String("port", getPort()), helpers.String("version", cautils.BuildNumber))
+	logger.L().Info("Started Kubescape server", helpers.String("port", getPort()), helpers.String("version", versioncheck.BuildNumber))
 
 	servePprof()
 
@@ -91,6 +88,10 @@ func loadTLSKey(certFile, keyFile string) (*tls.Certificate, error) {
 		return nil, fmt.Errorf("failed to load key pair: %v", err)
 	}
 	return &pair, nil
+}
+
+func getOffline() bool {
+	return os.Getenv("KS_OFFLINE") == "true"
 }
 
 func getPort() string {

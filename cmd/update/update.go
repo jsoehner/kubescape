@@ -6,15 +6,19 @@ package update
 
 import (
 	"fmt"
+	"strings"
 
-	logger "github.com/kubescape/go-logger"
+	"github.com/kubescape/kubescape/v3/core/meta"
+
+	"github.com/kubescape/backend/pkg/versioncheck"
+	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
-	"github.com/kubescape/kubescape/v2/core/cautils"
+	"github.com/kubescape/kubescape/v3/core/cautils"
 	"github.com/spf13/cobra"
 )
 
 const (
-	installationLink string = "https://github.com/kubescape/kubescape/blob/master/docs/installation.md"
+	installationLink string = "https://kubescape.io/docs/install-cli/"
 )
 
 var updateCmdExamples = fmt.Sprintf(`
@@ -22,19 +26,31 @@ var updateCmdExamples = fmt.Sprintf(`
   %[1]s update
 `, cautils.ExecName())
 
-func GetUpdateCmd() *cobra.Command {
+func GetUpdateCmd(ks meta.IKubescape) *cobra.Command {
 	updateCmd := &cobra.Command{
 		Use:     "update",
 		Short:   "Update to latest release version",
 		Long:    ``,
 		Example: updateCmdExamples,
 		RunE: func(_ *cobra.Command, args []string) error {
+			v := versioncheck.NewVersionCheckHandler()
+			versionCheckRequest := versioncheck.NewVersionCheckRequest("", versioncheck.BuildNumber, "", "", "update", nil)
+			if err := v.CheckLatestVersion(ks.Context(), versionCheckRequest); err != nil {
+				return err
+			}
+
 			//Checking the user's version of kubescape to the latest release
-			if cautils.BuildNumber == cautils.LatestReleaseVersion {
+			if versioncheck.BuildNumber == "" || strings.Contains(versioncheck.BuildNumber, "rc") {
+				//your version is unknown
+				fmt.Printf("Nothing to update: you are running the development version\n")
+			} else if versioncheck.LatestReleaseVersion == "" {
+				//Failed to check for updates
+				logger.L().Info("Failed to check for updates")
+			} else if versioncheck.BuildNumber == versioncheck.LatestReleaseVersion {
 				//your version == latest version
-				logger.L().Info(("Nothing to update, you are running the latest version"), helpers.String("Version", cautils.BuildNumber))
+				logger.L().Info("Nothing to update: you are running the latest version", helpers.String("Version", versioncheck.BuildNumber))
 			} else {
-				fmt.Printf("Please refer to our installation docs in the following link: %s\n", installationLink)
+				fmt.Printf("Version %s is available. Please refer to our installation documentation: %s\n", versioncheck.LatestReleaseVersion, installationLink)
 			}
 			return nil
 		},

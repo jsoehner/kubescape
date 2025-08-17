@@ -2,24 +2,25 @@ package opaprocessor
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 
-	logger "github.com/kubescape/go-logger"
+	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
-	"github.com/kubescape/kubescape/v2/core/cautils"
+	"github.com/kubescape/kubescape/v3/core/cautils"
 	"github.com/kubescape/opa-utils/reporthandling"
 	"github.com/kubescape/opa-utils/reporthandling/apis"
 	"github.com/kubescape/opa-utils/reporthandling/results/v1/reportsummary"
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/open-policy-agent/opa/rego"
-	"github.com/open-policy-agent/opa/topdown/builtins"
-	"github.com/open-policy-agent/opa/types"
-	"golang.org/x/exp/slices"
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/rego"
+	"github.com/open-policy-agent/opa/v1/topdown/builtins"
+	"github.com/open-policy-agent/opa/v1/types"
 )
 
-// ConvertFrameworksToPolicies convert list of frameworks to list of policies
-func ConvertFrameworksToPolicies(frameworks []reporthandling.Framework, version string, excludedRules map[string]bool, scanningScope reporthandling.ScanningScopeType) *cautils.Policies {
+// convertFrameworksToPolicies convert list of frameworks to list of policies
+func convertFrameworksToPolicies(frameworks []reporthandling.Framework, excludedRules map[string]bool, scanningScope reporthandling.ScanningScopeType) *cautils.Policies {
 	policies := cautils.NewPolicies()
-	policies.Set(frameworks, version, excludedRules, scanningScope)
+	policies.Set(frameworks, excludedRules, scanningScope)
 	return policies
 }
 
@@ -75,7 +76,9 @@ var cosignVerifySignatureDefinition = func(bctx rego.BuiltinContext, a, b *ast.T
 	if err != nil {
 		return nil, fmt.Errorf("invalid parameter type: %v", err)
 	}
-	result, err := verify(string(aStr), string(bStr))
+	// Replace double backslashes with single backslashes
+	bbStr := strings.Replace(string(bStr), "\\n", "\n", -1)
+	result, err := verify(string(aStr), bbStr)
 	if err != nil {
 		// Do not change this log from debug level. We might find a lot of images without signature
 		logger.L().Debug("failed to verify signature", helpers.String("image", string(aStr)), helpers.String("key", string(bStr)), helpers.Error(err))
@@ -106,6 +109,6 @@ var imageNameNormalizeDefinition = func(bctx rego.BuiltinContext, a *ast.Term) (
 	if err != nil {
 		return nil, fmt.Errorf("invalid parameter type: %v", err)
 	}
-	normalizedName, err := normalize_image_name(string(aStr))
+	normalizedName, err := cautils.NormalizeImageName(string(aStr))
 	return ast.StringTerm(normalizedName), err
 }

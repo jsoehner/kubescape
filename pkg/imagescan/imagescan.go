@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/adrg/xdg"
 	"github.com/anchore/grype/grype"
 	"github.com/anchore/grype/grype/db"
 	"github.com/anchore/grype/grype/grypeerr"
+	"github.com/anchore/grype/grype/match"
 	"github.com/anchore/grype/grype/matcher"
 	"github.com/anchore/grype/grype/matcher/dotnet"
 	"github.com/anchore/grype/grype/matcher/golang"
@@ -23,7 +25,7 @@ import (
 	"github.com/anchore/grype/grype/store"
 	"github.com/anchore/grype/grype/vulnerability"
 	"github.com/anchore/stereoscope/pkg/image"
-	"github.com/anchore/syft/syft/pkg/cataloger"
+	"github.com/anchore/syft/syft"
 )
 
 const (
@@ -44,6 +46,10 @@ func (c RegistryCredentials) IsEmpty() bool {
 //
 // Values equal to the threshold are considered failing, too.
 func ExceedsSeverityThreshold(scanResults *models.PresenterConfig, severity vulnerability.Severity) bool {
+	if scanResults.MetadataProvider == nil {
+		return false
+	}
+
 	return grype.HasSeverityAtOrAbove(scanResults.MetadataProvider, severity, scanResults.Matches)
 }
 
@@ -93,11 +99,10 @@ func getProviderConfig(creds RegistryCredentials) pkg.ProviderConfig {
 	regOpts := &image.RegistryOptions{
 		Credentials: syftCreds,
 	}
-	catOpts := cataloger.DefaultConfig()
 	pc := pkg.ProviderConfig{
 		SyftProviderConfig: pkg.SyftProviderConfig{
-			RegistryOptions:   regOpts,
-			CatalogingOptions: catOpts,
+			RegistryOptions: regOpts,
+			SBOMOptions:     syft.DefaultCreateSBOMConfig(),
 		},
 		SynthesisConfig: pkg.SynthesisConfig{
 			GenerateMissingCPEs: true,
@@ -110,57 +115,117 @@ func getProviderConfig(creds RegistryCredentials) pkg.ProviderConfig {
 //
 // It performs image scanning and everything needed in between.
 type Service struct {
-	dbCfg db.Config
+	dbCfg    db.Config
+	dbCloser *db.Closer
+	dbStatus *db.Status
+	dbStore  *store.Store
 }
 
-func (s *Service) Scan(ctx context.Context, userInput string, creds RegistryCredentials) (*models.PresenterConfig, error) {
-	var err error
-
-	store, status, dbCloser, err := NewVulnerabilityDB(s.dbCfg, true)
-	if err = validateDBLoad(err, status); err != nil {
-		return nil, err
+func getIgnoredMatches(vulnerabilityExceptions []string, store *store.Store, packages []pkg.Package, pkgContext pkg.Context) (*match.Matches, []match.IgnoredMatch, error) {
+	if vulnerabilityExceptions == nil {
+		vulnerabilityExceptions = []string{}
 	}
 
-	packages, pkgContext, sbom, err := pkg.Provide(userInput, getProviderConfig(creds))
-	if err != nil {
-		return nil, err
-	}
-
-	if dbCloser != nil {
-		defer dbCloser.Close()
+	var ignoreRules []match.IgnoreRule
+	for _, exception := range vulnerabilityExceptions {
+		rule := match.IgnoreRule{
+			Vulnerability: exception,
+		}
+		ignoreRules = append(ignoreRules, rule)
 	}
 
 	matcher := grype.VulnerabilityMatcher{
-		Store:    *store,
-		Matchers: getMatchers(),
+		Store:       *store,
+		Matchers:    getMatchers(),
+		IgnoreRules: ignoreRules,
 	}
 
 	remainingMatches, ignoredMatches, err := matcher.FindMatches(packages, pkgContext)
 	if err != nil {
 		if !errors.Is(err, grypeerr.ErrAboveSeverityThreshold) {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
+	return remainingMatches, ignoredMatches, nil
+}
+
+// Filter the remaing matches based on severity exceptions.
+func filterMatchesBasedOnSeverity(severityExceptions []string, remainingMatches match.Matches, store *store.Store) match.Matches {
+	if severityExceptions == nil {
+		return remainingMatches
+	}
+
+	filteredMatches := match.NewMatches()
+
+	for m := range remainingMatches.Enumerate() {
+		metadata, err := store.GetMetadata(m.Vulnerability.ID, m.Vulnerability.Namespace)
+		if err != nil {
+			continue
+		}
+
+		// Skip this match if the severity of this match is present in severityExceptions.
+		excludeSeverity := false
+		for _, sever := range severityExceptions {
+			if strings.ToUpper(metadata.Severity) == sever {
+				excludeSeverity = true
+				continue
+			}
+		}
+
+		if !excludeSeverity {
+			filteredMatches.Add(m)
+		}
+	}
+
+	return filteredMatches
+}
+
+func (s *Service) Scan(_ context.Context, userInput string, creds RegistryCredentials, vulnerabilityExceptions, severityExceptions []string) (*models.PresenterConfig, error) {
+	packages, pkgContext, sbom, err := pkg.Provide(userInput, getProviderConfig(creds))
+	if err != nil {
+		return nil, err
+	}
+
+	remainingMatches, ignoredMatches, err := getIgnoredMatches(vulnerabilityExceptions, s.dbStore, packages, pkgContext)
+	if err != nil {
+		return nil, err
+	}
+
+	filteredMatches := filterMatchesBasedOnSeverity(severityExceptions, *remainingMatches, s.dbStore)
+
 	pb := models.PresenterConfig{
-		Matches:          *remainingMatches,
+		Matches:          filteredMatches,
 		IgnoredMatches:   ignoredMatches,
 		Packages:         packages,
 		Context:          pkgContext,
-		MetadataProvider: store,
+		MetadataProvider: s.dbStore,
 		SBOM:             sbom,
 		AppConfig:        nil,
-		DBStatus:         status,
+		DBStatus:         s.dbStatus,
 	}
 	return &pb, nil
+}
+
+func (s *Service) Close() {
+	s.dbCloser.Close()
 }
 
 func NewVulnerabilityDB(cfg db.Config, update bool) (*store.Store, *db.Status, *db.Closer, error) {
 	return grype.LoadVulnerabilityDB(cfg, update)
 }
 
-func NewScanService(dbCfg db.Config) Service {
-	return Service{dbCfg: dbCfg}
+func NewScanService(dbCfg db.Config) (*Service, error) {
+	dbStore, dbStatus, dbCloser, err := NewVulnerabilityDB(dbCfg, true)
+	if err = validateDBLoad(err, dbStatus); err != nil {
+		return nil, err
+	}
+	return &Service{
+		dbCfg:    dbCfg,
+		dbCloser: dbCloser,
+		dbStatus: dbStatus,
+		dbStore:  dbStore,
+	}, nil
 }
 
 // ParseSeverity returns a Grype severity given a severity string

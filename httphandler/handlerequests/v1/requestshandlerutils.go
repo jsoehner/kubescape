@@ -9,12 +9,14 @@ import (
 	"strings"
 
 	"github.com/armosec/utils-go/boolutils"
-	logger "github.com/kubescape/go-logger"
+	"github.com/kubescape/backend/pkg/versioncheck"
+	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
-	"github.com/kubescape/k8s-interface/k8sinterface"
-	"github.com/kubescape/kubescape/v2/core/cautils"
-	"github.com/kubescape/kubescape/v2/core/cautils/getter"
-	"github.com/kubescape/kubescape/v2/core/core"
+	"github.com/kubescape/kubescape/v3/core/cautils"
+	"github.com/kubescape/kubescape/v3/core/cautils/getter"
+	"github.com/kubescape/kubescape/v3/core/core"
+	"github.com/kubescape/kubescape/v3/httphandler/config"
+	"github.com/kubescape/kubescape/v3/httphandler/storage"
 	utilsapisv1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
 	utilsmetav1 "github.com/kubescape/opa-utils/httpserver/meta/v1"
 	reporthandlingv2 "github.com/kubescape/opa-utils/reporthandling/v2"
@@ -23,11 +25,12 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+var scanImpl = scan // Override for testing
 func (handler *HTTPHandler) executeScan(scanReq *scanRequestParams) {
 	response := &utilsmetav1.Response{}
 
 	logger.L().Info("scan triggered", helpers.String("ID", scanReq.scanID))
-	_, err := scan(scanReq.ctx, scanReq.scanInfo, scanReq.scanID)
+	_, err := scanImpl(scanReq.ctx, scanReq.scanInfo, scanReq.scanID)
 	if err != nil {
 		logger.L().Ctx(scanReq.ctx).Error("scanning failed", helpers.String("ID", scanReq.scanID), helpers.Error(err))
 		if scanReq.scanQueryParams.ReturnResults {
@@ -37,14 +40,18 @@ func (handler *HTTPHandler) executeScan(scanReq *scanRequestParams) {
 	} else {
 		logger.L().Ctx(scanReq.ctx).Success("done scanning", helpers.String("ID", scanReq.scanID))
 		if scanReq.scanQueryParams.ReturnResults {
+			//TODO(ttimonen) should we actually pass the PostureReport here somehow?
 			response.Type = utilsapisv1.ResultsV1ScanResponseType
 		}
 	}
 
 	handler.state.setNotBusy(scanReq.scanID)
 
-	// return results
-	handler.scanResponseChan.push(scanReq.scanID, response)
+	// return results, if someone's waiting for them; never block.
+	select {
+	case scanReq.resp <- response:
+	default:
+	}
 }
 
 // executeScan execute the scan request passed in the channel
@@ -59,11 +66,11 @@ func scan(ctx context.Context, scanInfo *cautils.ScanInfo, scanID string) (*repo
 	ctx, spanScan := otel.Tracer("").Start(ctx, "kubescape.scan")
 	defer spanScan.End()
 
-	ks := core.NewKubescape()
+	ks := core.NewKubescape(ctx)
 
 	spanScan.AddEvent("scanning metadata",
-		trace.WithAttributes(attribute.String("version", cautils.BuildNumber)),
-		trace.WithAttributes(attribute.String("build", cautils.Client)),
+		trace.WithAttributes(attribute.String("version", versioncheck.BuildNumber)),
+		trace.WithAttributes(attribute.String("build", versioncheck.Client)),
 		trace.WithAttributes(attribute.String("scanID", scanInfo.ScanID)),
 		trace.WithAttributes(attribute.Bool("scanAll", scanInfo.ScanAll)),
 		trace.WithAttributes(attribute.Bool("HostSensorEnabled", scanInfo.HostSensorEnabled.GetBool())),
@@ -72,13 +79,24 @@ func scan(ctx context.Context, scanInfo *cautils.ScanInfo, scanID string) (*repo
 		trace.WithAttributes(attribute.String("hostSensorYamlPath", scanInfo.HostSensorYamlPath)),
 	)
 
-	result, err := ks.Scan(ctx, scanInfo)
+	result, err := ks.Scan(scanInfo)
 	if err != nil {
 		return nil, writeScanErrorToFile(err, scanID)
 	}
-	if err := result.HandleResults(ctx); err != nil {
+	if err := result.HandleResults(ctx, scanInfo); err != nil {
 		return nil, err
 	}
+	storage := storage.GetStorage()
+	if storage != nil {
+		pr := result.GetResults()
+
+		if err := storage.StorePostureReportResults(ctx, pr); err != nil {
+			return nil, err
+		}
+	} else {
+		logger.L().Debug("storage is not initialized - skipping storing results")
+	}
+
 	return nil, nil
 }
 
@@ -150,9 +168,6 @@ func getScanCommand(scanRequest *utilsmetav1.PostScanRequest, scanID string) *ca
 	scanInfo.Output = filepath.Join(OutputDir, scanID)
 	// *** end ***
 
-	// Set default KubeContext from current context
-	k8sinterface.SetClusterContextName(os.Getenv("KS_CONTEXT"))
-
 	return scanInfo
 }
 
@@ -160,7 +175,8 @@ func defaultScanInfo() *cautils.ScanInfo {
 	scanInfo := &cautils.ScanInfo{}
 	scanInfo.FailThreshold = 100
 	scanInfo.ComplianceThreshold = 0
-	scanInfo.AccountID = envToString("KS_ACCOUNT", "")                             // publish results to Kubescape SaaS
+	scanInfo.AccountID = envToString("KS_ACCOUNT_ID", config.GetAccount())         // publish results to Kubescape SaaS
+	scanInfo.AccessKey = envToString("KS_ACCESS_KEY", config.GetAccessKey())       // publish results to Kubescape SaaS
 	scanInfo.ExcludedNamespaces = envToString("KS_EXCLUDE_NAMESPACES", "")         // namespaces to exclude
 	scanInfo.IncludeNamespaces = envToString("KS_INCLUDE_NAMESPACES", "")          // namespaces to include
 	scanInfo.HostSensorYamlPath = envToString("KS_HOST_SCAN_YAML", "")             // path to host scan YAML
@@ -168,6 +184,7 @@ func defaultScanInfo() *cautils.ScanInfo {
 	scanInfo.Format = envToString("KS_FORMAT", "json")                             // default output should be json
 	scanInfo.Submit = envToBool("KS_SUBMIT", false)                                // publish results to Kubescape SaaS
 	scanInfo.Local = envToBool("KS_KEEP_LOCAL", false)                             // do not publish results to Kubescape SaaS
+	scanInfo.EnableRegoPrint = envToBool("KS_REGO_PRINT", false)                   // print rego rules
 	scanInfo.HostSensorEnabled.SetBool(envToBool("KS_ENABLE_HOST_SCANNER", false)) // enable host scanner
 	if !envToBool("KS_DOWNLOAD_ARTIFACTS", false) {
 		scanInfo.UseArtifactsFrom = getter.DefaultLocalStore // Load files from cache (this will prevent kubescape fom downloading the artifacts every time)
