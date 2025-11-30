@@ -12,7 +12,6 @@ import (
 	"github.com/kubescape/kubescape/v3/core/cautils"
 	"github.com/kubescape/kubescape/v3/core/meta"
 	metav1 "github.com/kubescape/kubescape/v3/core/meta/datastructures/v1"
-	"github.com/kubescape/kubescape/v3/pkg/imagescan"
 	"github.com/spf13/cobra"
 )
 
@@ -28,6 +27,7 @@ var patchCmdExamples = fmt.Sprintf(`
 func GetPatchCmd(ks meta.IKubescape) *cobra.Command {
 	var patchInfo metav1.PatchInfo
 	var scanInfo cautils.ScanInfo
+	var useDefaultMatchers bool
 
 	patchCmd := &cobra.Command{
 		Use:     "patch --image <image>:<tag> [flags]",
@@ -49,12 +49,15 @@ func GetPatchCmd(ks meta.IKubescape) *cobra.Command {
 				return err
 			}
 
-			results, err := ks.Patch(&patchInfo, &scanInfo)
+			// Set the UseDefaultMatchers field in scanInfo
+			scanInfo.UseDefaultMatchers = useDefaultMatchers
+
+			exceedsSeverityThreshold, err := ks.Patch(&patchInfo, &scanInfo)
 			if err != nil {
 				return err
 			}
 
-			if imagescan.ExceedsSeverityThreshold(results, imagescan.ParseSeverity(scanInfo.FailThresholdSeverity)) {
+			if exceedsSeverityThreshold {
 				shared.TerminateOnExceedingSeverity(&scanInfo, logger.L())
 			}
 
@@ -76,6 +79,7 @@ func GetPatchCmd(ks meta.IKubescape) *cobra.Command {
 	patchCmd.PersistentFlags().BoolVarP(&scanInfo.VerboseMode, "verbose", "v", false, "Display full report. Default to false")
 
 	patchCmd.PersistentFlags().StringVarP(&scanInfo.FailThresholdSeverity, "severity-threshold", "s", "", "Severity threshold is the severity of a vulnerability at which the command fails and returns exit code 1")
+	patchCmd.PersistentFlags().BoolVarP(&useDefaultMatchers, "use-default-matchers", "", true, "Use default matchers (true) or CPE matchers (false) for image scanning")
 
 	return patchCmd
 }

@@ -3,12 +3,12 @@ permissions: read-all
 on:
   push:
     tags:
-      - 'v*.*.*-rc.*'
+      - "v*.*.*-rc.*"
 jobs:
   retag:
     outputs:
       NEW_TAG: ${{ steps.tag-calculator.outputs.NEW_TAG }}
-    runs-on: ubuntu22-core4-mem16-ssd150
+    runs-on: ubuntu-large
     steps:
       - uses: actions/checkout@v4
       - id: tag-calculator
@@ -32,13 +32,14 @@ jobs:
       statuses: read
       contents: write
       attestations: write
+      artifact-metadata: read
     needs: [retag]
     uses: ./.github/workflows/b-binary-build-and-e2e-tests.yaml
     with:
       COMPONENT_NAME: kubescape
       CGO_ENABLED: 0
       GO111MODULE: ""
-      GO_VERSION: "1.24"
+      GO_VERSION: "1.25"
       RELEASE: ${{ needs.retag.outputs.NEW_TAG }}
       CLIENT: release
     secrets: inherit
@@ -59,6 +60,7 @@ jobs:
       statuses: read
       security-events: read
       attestations: read
+      artifact-metadata: read
     needs: [retag, binary-build]
     uses: ./.github/workflows/c-create-release.yaml
     with:
@@ -109,8 +111,9 @@ jobs:
       statuses: read
       attestations: read
       contents: write
+      artifact-metadata: read
     uses: ./.github/workflows/e-post-release.yaml
-    needs: [publish-image]
+    needs: [retag, publish-image]
     with:
       TAG: ${{ needs.retag.outputs.NEW_TAG }}
     secrets: inherit

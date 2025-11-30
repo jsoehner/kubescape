@@ -202,7 +202,7 @@ func (ks *Kubescape) Scan(scanInfo *cautils.ScanInfo) (*resultshandling.ResultsH
 	}
 
 	if scanInfo.ScanImages {
-		scanImages(scanInfo.ScanType, scanData, ks.Context(), resultsHandling)
+		scanImages(scanInfo.ScanType, scanData, ks.Context(), resultsHandling, scanInfo)
 	}
 	// ========================= results handling =====================
 	resultsHandling.SetData(scanData)
@@ -214,7 +214,7 @@ func (ks *Kubescape) Scan(scanInfo *cautils.ScanInfo) (*resultshandling.ResultsH
 	return resultsHandling, nil
 }
 
-func scanImages(scanType cautils.ScanTypes, scanData *cautils.OPASessionObj, ctx context.Context, resultsHandling *resultshandling.ResultsHandler) {
+func scanImages(scanType cautils.ScanTypes, scanData *cautils.OPASessionObj, ctx context.Context, resultsHandling *resultshandling.ResultsHandler, scanInfo *cautils.ScanInfo) {
 	var imagesToScan []string
 
 	if scanType == cautils.ScanTypeWorkload {
@@ -243,8 +243,8 @@ func scanImages(scanType cautils.ScanTypes, scanData *cautils.OPASessionObj, ctx
 		}
 	}
 
-	dbCfg, _ := imagescan.NewDefaultDBConfig()
-	svc, err := imagescan.NewScanService(dbCfg)
+	distCfg, installCfg, _ := imagescan.NewDefaultDBConfig()
+	svc, err := imagescan.NewScanServiceWithMatchers(distCfg, installCfg, scanInfo.UseDefaultMatchers)
 	if err != nil {
 		logger.L().StopError(fmt.Sprintf("Failed to initialize image scanner: %s", err))
 		return
@@ -267,10 +267,7 @@ func scanSingleImage(ctx context.Context, img string, svc *imagescan.Service, re
 		return err
 	}
 
-	resultsHandling.ImageScanData = append(resultsHandling.ImageScanData, cautils.ImageScanData{
-		Image:           img,
-		PresenterConfig: scanResults,
-	})
+	resultsHandling.ImageScanData = append(resultsHandling.ImageScanData, *scanResults)
 	return nil
 }
 

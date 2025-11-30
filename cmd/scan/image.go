@@ -8,7 +8,6 @@ import (
 	"github.com/kubescape/kubescape/v3/core/cautils"
 	"github.com/kubescape/kubescape/v3/core/meta"
 	metav1 "github.com/kubescape/kubescape/v3/core/meta/datastructures/v1"
-	"github.com/kubescape/kubescape/v3/pkg/imagescan"
 	"github.com/spf13/cobra"
 )
 
@@ -33,6 +32,7 @@ var (
 func getImageCmd(ks meta.IKubescape, scanInfo *cautils.ScanInfo) *cobra.Command {
 	var imgCredentials shared.ImageCredentials
 	var exceptions string
+	var useDefaultMatchers bool
 
 	cmd := &cobra.Command{
 		Use:     "image <image>:<tag> [flags]",
@@ -54,18 +54,19 @@ func getImageCmd(ks meta.IKubescape, scanInfo *cautils.ScanInfo) *cobra.Command 
 			}
 
 			imgScanInfo := &metav1.ImageScanInfo{
-				Image:      args[0],
-				Username:   imgCredentials.Username,
-				Password:   imgCredentials.Password,
-				Exceptions: exceptions,
+				Image:              args[0],
+				Username:           imgCredentials.Username,
+				Password:           imgCredentials.Password,
+				Exceptions:         exceptions,
+				UseDefaultMatchers: useDefaultMatchers,
 			}
 
-			results, err := ks.ScanImage(imgScanInfo, scanInfo)
+			exceedsSeverityThreshold, err := ks.ScanImage(imgScanInfo, scanInfo)
 			if err != nil {
 				return err
 			}
 
-			if imagescan.ExceedsSeverityThreshold(results, imagescan.ParseSeverity(scanInfo.FailThresholdSeverity)) {
+			if exceedsSeverityThreshold {
 				shared.TerminateOnExceedingSeverity(scanInfo, logger.L())
 			}
 
@@ -77,6 +78,7 @@ func getImageCmd(ks meta.IKubescape, scanInfo *cautils.ScanInfo) *cobra.Command 
 	cmd.PersistentFlags().StringVarP(&exceptions, "exceptions", "", "", "Path to the exceptions file")
 	cmd.PersistentFlags().StringVarP(&imgCredentials.Username, "username", "u", "", "Username for registry login")
 	cmd.PersistentFlags().StringVarP(&imgCredentials.Password, "password", "p", "", "Password for registry login")
+	cmd.PersistentFlags().BoolVarP(&useDefaultMatchers, "use-default-matchers", "", true, "Use default matchers (true) or CPE matchers (false)")
 
 	return cmd
 }

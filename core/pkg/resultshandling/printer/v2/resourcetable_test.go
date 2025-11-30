@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/armosec/armoapi-go/armotypes"
+	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/opa-utils/reporthandling/apis"
 	"github.com/kubescape/opa-utils/reporthandling/results/v1/reportsummary"
 	"github.com/kubescape/opa-utils/reporthandling/results/v1/resourcesresults"
@@ -326,15 +328,15 @@ func TestFailedPathsToString(t *testing.T) {
 
 func TestShortFormatResource(t *testing.T) {
 	// Create a test case with an empty resourceRows slice
-	emptyResourceRows := [][]string{}
+	emptyResourceRows := []table.Row{}
 
 	// Create a test case with a single resource row
-	singleResourceRow := [][]string{
+	singleResourceRow := []table.Row{
 		{"High", "Control1", "https://example.com/doc1", "Path1"},
 	}
 
 	// Create a test case with multiple resource rows
-	multipleResourceRows := [][]string{
+	multipleResourceRows := []table.Row{
 		{"Medium", "Control2", "https://example.com/doc2", "Path2"},
 		{"Low", "Control3", "https://example.com/doc3", "Path3"},
 	}
@@ -343,11 +345,11 @@ func TestShortFormatResource(t *testing.T) {
 	assert.Empty(t, actualRows)
 
 	actualRows = shortFormatResource(singleResourceRow)
-	expectedRows := [][]string{{"Severity             : High\nControl Name         : Control1\nDocs                 : https://example.com/doc1\nAssisted Remediation : Path1"}}
+	expectedRows := []table.Row{{"Severity             : High\nControl Name         : Control1\nDocs                 : https://example.com/doc1\nAssisted Remediation : Path1"}}
 	assert.Equal(t, expectedRows, actualRows)
 
 	actualRows = shortFormatResource(multipleResourceRows)
-	expectedRows = [][]string{{"Severity             : Medium\nControl Name         : Control2\nDocs                 : https://example.com/doc2\nAssisted Remediation : Path2"},
+	expectedRows = []table.Row{{"Severity             : Medium\nControl Name         : Control2\nDocs                 : https://example.com/doc2\nAssisted Remediation : Path2"},
 		{"Severity             : Low\nControl Name         : Control3\nDocs                 : https://example.com/doc3\nAssisted Remediation : Path3"}}
 	assert.Equal(t, expectedRows, actualRows)
 }
@@ -355,33 +357,47 @@ func TestShortFormatResource(t *testing.T) {
 func TestGenerateResourceHeader(t *testing.T) {
 	// Test case 1: Short headers
 	shortHeaders := generateResourceHeader(true)
-	expectedShortHeaders := []string{"Resources"}
+	expectedShortHeaders := table.Row{"Resources"}
 	assert.Equal(t, expectedShortHeaders, shortHeaders)
 
 	// Test case 2: Full headers
 	fullHeaders := generateResourceHeader(false)
-	expectedFullHeaders := []string{"Severity", "Control name", "Docs", "Assisted remediation"}
+	expectedFullHeaders := table.Row{"Severity", "Control name", "Docs", "Assisted remediation"}
 	assert.Equal(t, expectedFullHeaders, fullHeaders)
 }
 
 func TestGenerateResourceRows_Loop(t *testing.T) {
 	tests := []struct {
-		name           string
-		summaryDetails reportsummary.SummaryDetails
-		controls       []resourcesresults.ResourceAssociatedControl
-		expectedLen    int
+		name                  string
+		summaryDetails        reportsummary.SummaryDetails
+		controls              []resourcesresults.ResourceAssociatedControl
+		resource              workloadinterface.IMetadata
+		expectedLen           int
+		expectedContainerName string
 	}{
 		{
 			name:           "Empty controls",
 			summaryDetails: reportsummary.SummaryDetails{},
 			controls:       []resourcesresults.ResourceAssociatedControl{},
-			expectedLen:    0,
+			resource: workloadinterface.NewWorkloadObj(map[string]interface{}{
+				"kind": "Pod",
+				"spec": map[string]interface{}{
+					"containers": []interface{}{
+						map[string]interface{}{
+							"name":  "alpine-container",
+							"image": "alpine:latest",
+						},
+					},
+				},
+			}),
+			expectedLen:           0,
+			expectedContainerName: "",
 		},
 		{
 			name:           "2 Failed Controls",
 			summaryDetails: reportsummary.SummaryDetails{},
 			controls: []resourcesresults.ResourceAssociatedControl{
-				resourcesresults.ResourceAssociatedControl{
+				{
 					ControlID: "control-1",
 					Name:      "Control 1",
 					Status:    apis.StatusInfo{},
@@ -393,16 +409,16 @@ func TestGenerateResourceRows_Loop(t *testing.T) {
 
 							Paths: []armotypes.PosturePaths{
 								{
-									FailedPath: "some-path1",
+									FailedPath: "spec.template.spec.containers[0].securityContext.runAsNonRoot=true",
 								},
 								{
-									FailedPath: "random-path1",
+									FailedPath: "spec.template.spec.containers[0].securityContext.runAsGroup=1000",
 								},
 							},
 						},
 					},
 				},
-				resourcesresults.ResourceAssociatedControl{
+				{
 					ControlID: "control-2",
 					Name:      "Control 2",
 					Status:    apis.StatusInfo{},
@@ -413,23 +429,35 @@ func TestGenerateResourceRows_Loop(t *testing.T) {
 							SubStatus: "configuration",
 							Paths: []armotypes.PosturePaths{
 								{
-									FailedPath: "some-path2",
+									FailedPath: "spec.template.spec.containers[0].securityContext.runAsNonRoot=true",
 								},
 								{
-									FailedPath: "random-path2",
+									FailedPath: "spec.template.spec.containers[0].securityContext.runAsGroup=true",
 								},
 							},
 						},
 					},
 				},
 			},
-			expectedLen: 2,
+			resource: workloadinterface.NewWorkloadObj(map[string]interface{}{
+				"kind": "Pod",
+				"spec": map[string]interface{}{
+					"containers": []interface{}{
+						map[string]interface{}{
+							"name":  "alpine-container",
+							"image": "alpine:latest",
+						},
+					},
+				},
+			}),
+			expectedLen:           2,
+			expectedContainerName: "alpine-container",
 		},
 		{
 			name:           "One failed control",
 			summaryDetails: reportsummary.SummaryDetails{},
 			controls: []resourcesresults.ResourceAssociatedControl{
-				resourcesresults.ResourceAssociatedControl{
+				{
 					ControlID: "control-1",
 					Name:      "Control 1",
 					Status:    apis.StatusInfo{},
@@ -441,16 +469,16 @@ func TestGenerateResourceRows_Loop(t *testing.T) {
 
 							Paths: []armotypes.PosturePaths{
 								{
-									FailedPath: "some-path1",
+									FailedPath: "spec.template.spec.containers[0].securityContext.runAsNonRoot=true",
 								},
 								{
-									FailedPath: "random-path1",
+									FailedPath: "spec.template.spec.containers[0].securityContext.runAsGroup=true",
 								},
 							},
 						},
 					},
 				},
-				resourcesresults.ResourceAssociatedControl{
+				{
 					ControlID: "control-2",
 					Name:      "Control 2",
 					Status:    apis.StatusInfo{},
@@ -461,24 +489,42 @@ func TestGenerateResourceRows_Loop(t *testing.T) {
 							SubStatus: "configuration",
 							Paths: []armotypes.PosturePaths{
 								{
-									FailedPath: "some-path2",
+									FailedPath: "spec.template.spec.containers[0].securityContext.runAsNonRoot=true",
 								},
 								{
-									FailedPath: "random-path2",
+									FailedPath: "spec.template.spec.containers[0].securityContext.runAsGroup=true",
 								},
 							},
 						},
 					},
 				},
 			},
-			expectedLen: 1,
+			resource: workloadinterface.NewWorkloadObj(map[string]interface{}{
+				"kind": "Pod",
+				"spec": map[string]interface{}{
+					"containers": []interface{}{
+						map[string]interface{}{
+							"name":  "nginx-container",
+							"image": "nginx:latest",
+						},
+					},
+				},
+			}),
+			expectedLen:           1,
+			expectedContainerName: "nginx-container",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rows := generateResourceRows(tt.controls, &tt.summaryDetails)
+			rows := generateResourceRows(tt.controls, &tt.summaryDetails, tt.resource)
 			assert.Equal(t, tt.expectedLen, len(rows))
+			//remediation is the last column of the first row
+			if len(rows) != 0 {
+				remediation := rows[0][3]
+				assert.Contains(t, remediation, tt.expectedContainerName)
+			}
+
 		})
 	}
 }

@@ -4,6 +4,22 @@ Kubescape can run as a command line tool on a client, as an operator inside a cl
 
 The best way to get started with Kubescape is to download it to the machine you use to manage your Kubernetes cluster.
 
+## Table of Contents
+
+- [Install Kubescape](#install-kubescape)
+- [Run your first scan](#run-your-first-scan)
+- [Usage](#usage)
+  - [Misconfigurations Scanning](#misconfigurations-scanning)
+  - [Image Scanning](#image-scanning)
+  - [Auto-Fix Misconfigurations](#auto-fix-misconfigurations)
+  - [Image Patching](#image-patching)
+  - [Validating Admission Policies (VAP)](#validating-admission-policies-vap)
+  - [MCP Server (AI Integration)](#mcp-server-ai-integration)
+  - [Configuration Management](#configuration-management)
+- [Offline/Air-gapped Support](#offlineair-gapped-environment-support)
+- [Other Ways to Use Kubescape](#other-ways-to-use-kubescape)
+- [Tutorial Videos](#tutorial-videos)
+
 ## Install Kubescape
 
 ```bash
@@ -28,7 +44,7 @@ Kubescape security posture overview for cluster: minikube
 In this overview, Kubescape shows you a summary of your cluster security posture, including the number of users who can perform administrative actions. For each result greater than 0, you should evaluate its need, and then define an exception to allow it. This baseline can be used to detect drift in future.
 
 Control plane
-┌────┬─────────────────────────────────────┬──────────────────────────────────────────────┐
+╭────┬─────────────────────────────────────┬──────────────────────────────────────────────╮
 │    │ Control Name                        │ Docs                                         │
 ├────┼─────────────────────────────────────┼──────────────────────────────────────────────┤
 │ ✅ │ API server insecure port is enabled │ https://kubescape.io/docs/controls/c-0005/   │
@@ -36,10 +52,10 @@ Control plane
 │ ❌ │ Audit logs enabled                  │ https://kubescape.io/docs/controls/c-0067/   │
 │ ✅ │ RBAC enabled                        │ https://kubescape.io/docs/controls/c-0088/   │
 │ ❌ │ Secret/etcd encryption enabled      │ https://kubescape.io/docs/controls/c-0066/   │
-└────┴─────────────────────────────────────┴──────────────────────────────────────────────┘
+╰────┴─────────────────────────────────────┴──────────────────────────────────────────────╯
 
 Access control
-┌─────────────────────────────────────────────────┬───────────┬────────────────────────────────────┐
+╭─────────────────────────────────────────────────┬───────────┬────────────────────────────────────╮
 │ Control Name                                    │ Resources │ View Details                       │
 ├─────────────────────────────────────────────────┼───────────┼────────────────────────────────────┤
 │ Cluster-admin binding                           │     1     │ $ kubescape scan control C-0035 -v │
@@ -51,24 +67,24 @@ Access control
 │ Portforwarding privileges                       │     1     │ $ kubescape scan control C-0063 -v │
 │ Validate admission controller (mutating)        │     0     │ $ kubescape scan control C-0039 -v │
 │ Validate admission controller (validating)      │     0     │ $ kubescape scan control C-0036 -v │
-└─────────────────────────────────────────────────┴───────────┴────────────────────────────────────┘
+╰─────────────────────────────────────────────────┴───────────┴────────────────────────────────────╯
 
 Secrets
-┌─────────────────────────────────────────────────┬───────────┬────────────────────────────────────┐
+╭─────────────────────────────────────────────────┬───────────┬────────────────────────────────────╮
 │ Control Name                                    │ Resources │ View Details                       │
 ├─────────────────────────────────────────────────┼───────────┼────────────────────────────────────┤
 │ Applications credentials in configuration files │     1     │ $ kubescape scan control C-0012 -v │
-└─────────────────────────────────────────────────┴───────────┴────────────────────────────────────┘
+╰─────────────────────────────────────────────────┴───────────┴────────────────────────────────────╯
 
 Network
-┌────────────────────────┬───────────┬────────────────────────────────────┐
+╭────────────────────────┬───────────┬────────────────────────────────────╮
 │ Control Name           │ Resources │ View Details                       │
 ├────────────────────────┼───────────┼────────────────────────────────────┤
 │ Missing network policy │    13     │ $ kubescape scan control C-0260 -v │
-└────────────────────────┴───────────┴────────────────────────────────────┘
+╰────────────────────────┴───────────┴────────────────────────────────────╯
 
 Workload
-┌─────────────────────────┬───────────┬────────────────────────────────────┐
+╭─────────────────────────┬───────────┬────────────────────────────────────╮
 │ Control Name            │ Resources │ View Details                       │
 ├─────────────────────────┼───────────┼────────────────────────────────────┤
 │ Host PID/IPC privileges │     2     │ $ kubescape scan control C-0038 -v │
@@ -76,7 +92,7 @@ Workload
 │ HostPath mount          │     1     │ $ kubescape scan control C-0048 -v │
 │ Non-root containers     │     6     │ $ kubescape scan control C-0013 -v │
 │ Privileged container    │     1     │ $ kubescape scan control C-0057 -v │
-└─────────────────────────┴───────────┴────────────────────────────────────┘
+╰─────────────────────────┴───────────┴────────────────────────────────────╯
 
 Highest-stake workloads
 ────────────────────────
@@ -170,7 +186,7 @@ kubescape scan --exclude-namespaces kube-system,kube-public
 
 #### Scan local YAML files
 ```sh
-kubescape scan /path/to/directory-or-directory
+kubescape scan /path/to/directory-or-file
 ```
 
 Take a look at the [example](https://youtu.be/Ox6DaR7_4ZI).
@@ -305,7 +321,7 @@ You can also download a single artifact, and scan with the `--use-from` flag:
     ```
 ## Image scanning
 
-Kubescape can scan container images for vulnerabilities.  It uses [Grype]() to scan the images.
+Kubescape can scan container images for vulnerabilities.  It uses [Grype](https://github.com/anchore/grype) to scan the images.
 
 ### Examples
 
@@ -346,6 +362,207 @@ View Kubescape scan results directly in the [Lens IDE](https://k8slens.dev/) usi
 ## Playground
 
 Experiment with Kubescape in the [Kubescape playground](https://killercoda.com/saiyampathak/scenario/kubescape): this scenario will install a K3s cluster and Kubescape.  You can start with any of the `kubescape scan` commands in the [examples](#examples).
+
+## Auto-Fix Misconfigurations
+
+Kubescape can automatically fix misconfigurations found in your Kubernetes manifest files.
+
+### Usage
+
+```bash
+# First, scan and save results to JSON
+kubescape scan /path/to/manifests --format json --output results.json
+
+# Then apply fixes based on the scan results
+kubescape fix results.json
+```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Preview changes without applying them |
+| `--no-confirm` | Apply fixes without confirmation prompts |
+| `--skip-user-values` | Skip changes that require user-defined values (default: true) |
+
+### Example
+
+```bash
+# Preview fixes without applying
+kubescape fix results.json --dry-run
+
+# Apply fixes without prompts (useful for CI/CD)
+kubescape fix results.json --no-confirm
+```
+
+> **Warning**  
+> The fix command modifies files in-place. Always review changes or use `--dry-run` first.
+
+## Image Patching
+
+Kubescape can patch container images to fix OS-level vulnerabilities using [Copacetic](https://github.com/project-copacetic/copacetic) and [BuildKit](https://github.com/moby/buildkit).
+
+### Prerequisites
+
+- Docker daemon installed and running
+- BuildKit daemon installed
+
+### Usage
+
+```bash
+# Start buildkitd (if not already running)
+sudo buildkitd &
+
+# Patch an image
+sudo kubescape patch --image docker.io/library/nginx:1.22
+```
+
+### Options
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-i, --image` | Image name to patch (required) | - |
+| `-t, --tag` | Tag for the patched image | `<image>-patched` |
+| `-a, --addr` | BuildKit daemon address | `unix:///run/buildkit/buildkitd.sock` |
+| `--timeout` | Patching timeout | `5m` |
+| `-u, --username` | Registry username | - |
+| `-p, --password` | Registry password | - |
+| `-v, --verbose` | Show detailed output | `false` |
+
+### Example without sudo
+
+```bash
+export BUILDKIT_VERSION=v0.11.4
+export BUILDKIT_PORT=8888
+
+# Start BuildKit in Docker
+docker run --detach --rm --privileged \
+  -p 127.0.0.1:$BUILDKIT_PORT:$BUILDKIT_PORT/tcp \
+  --name buildkitd \
+  --entrypoint buildkitd \
+  "moby/buildkit:$BUILDKIT_VERSION" \
+  --addr tcp://0.0.0.0:$BUILDKIT_PORT
+
+# Patch using TCP connection
+kubescape patch -i nginx:1.22 -a tcp://0.0.0.0:$BUILDKIT_PORT
+```
+
+> **Note**  
+> Image patching can only fix OS-level vulnerabilities, not application-level ones.
+
+For more details, see the [Patch Command Documentation](/cmd/patch/README.md).
+
+## Validating Admission Policies (VAP)
+
+Kubescape can help manage Kubernetes [Validating Admission Policies](https://kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/) using CEL (Common Expression Language).
+
+### Deploy the Policy Library
+
+Install the Kubescape CEL admission policy library:
+
+```bash
+kubescape vap deploy-library | kubectl apply -f -
+```
+
+This deploys:
+- Policy configuration CRD
+- Basic control configurations
+- Kubescape validating admission policies
+
+### Create Policy Bindings
+
+Bind policies to specific resources:
+
+```bash
+kubescape vap create-policy-binding \
+  --name my-policy-binding \
+  --policy c-0016 \
+  --namespace my-namespace | kubectl apply -f -
+```
+
+### Options for `create-policy-binding`
+
+| Flag | Description | Required |
+|------|-------------|----------|
+| `-n, --name` | Name of the policy binding | Yes |
+| `-p, --policy` | Policy/control to bind | Yes |
+| `--namespace` | Namespace selector (can be repeated) | No |
+| `--label` | Label selector in `key=value` format | No |
+| `-a, --action` | Action on failure: `Deny`, `Audit`, `Warn` | No (default: `Deny`) |
+| `-r, --parameter-reference` | Parameter reference object name | No |
+
+### Example
+
+```bash
+# Create a policy that denies non-compliant resources in production
+kubescape vap create-policy-binding \
+  --name deny-privileged-containers \
+  --policy c-0057 \
+  --namespace production \
+  --action Deny | kubectl apply -f -
+```
+
+## MCP Server (AI Integration)
+
+Kubescape provides an MCP (Model Context Protocol) server for AI assistant integration, allowing natural language queries about your cluster's security posture.
+
+### Prerequisites
+
+- Kubescape operator installed in your cluster
+- kubectl configured with cluster access
+
+### Start the Server
+
+```bash
+kubescape mcpserver
+```
+
+### Available Tools
+
+The MCP server exposes these tools to AI assistants:
+
+| Tool | Description |
+|------|-------------|
+| `list_vulnerability_manifests` | Discover vulnerability scan results |
+| `list_vulnerabilities_in_manifest` | List CVEs in a specific manifest |
+| `list_vulnerability_matches_for_cve` | Get details for a specific CVE |
+| `list_configuration_security_scan_manifests` | List configuration scan results |
+| `get_configuration_security_scan_manifest` | Get configuration scan details |
+
+### Integration with Claude Desktop
+
+Add to your Claude Desktop configuration:
+
+```json
+{
+  "mcpServers": {
+    "kubescape": {
+      "command": "kubescape",
+      "args": ["mcpserver"]
+    }
+  }
+}
+```
+
+For more details, see the [MCP Server Documentation](mcp-server.md).
+
+## Configuration Management
+
+Manage Kubescape's cached configurations:
+
+```bash
+# View current configuration
+kubescape config view
+
+# Set account ID
+kubescape config set accountID <your-account-id>
+
+# Set cloud report URL
+kubescape config set cloudReportURL <url>
+
+# Delete cached configuration
+kubescape config delete
+```
 
 ## Tutorial videos
 

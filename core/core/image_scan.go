@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/anchore/grype/grype/presenter/models"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/kubescape/v3/core/cautils"
 	ksmetav1 "github.com/kubescape/kubescape/v3/core/meta/datastructures/v1"
@@ -111,7 +110,9 @@ func regexStringMatch(pattern, target string) bool {
 // exception policy.
 func isTargetImage(targets []Target, attributes Attributes) bool {
 	for _, target := range targets {
-		return regexStringMatch(target.Attributes.Registry, attributes.Registry) && regexStringMatch(target.Attributes.Organization, attributes.Organization) && regexStringMatch(target.Attributes.ImageName, attributes.ImageName) && regexStringMatch(target.Attributes.ImageTag, attributes.ImageTag)
+		if regexStringMatch(target.Attributes.Registry, attributes.Registry) && regexStringMatch(target.Attributes.Organization, attributes.Organization) && regexStringMatch(target.Attributes.ImageName, attributes.ImageName) && regexStringMatch(target.Attributes.ImageTag, attributes.ImageTag) {
+			return true
+		}
 	}
 
 	return false
@@ -161,14 +162,14 @@ func getUniqueVulnerabilitiesAndSeverities(policies []VulnerabilitiesIgnorePolic
 	return uniqueVulnsList, uniqueSeversList
 }
 
-func (ks *Kubescape) ScanImage(imgScanInfo *ksmetav1.ImageScanInfo, scanInfo *cautils.ScanInfo) (*models.PresenterConfig, error) {
+func (ks *Kubescape) ScanImage(imgScanInfo *ksmetav1.ImageScanInfo, scanInfo *cautils.ScanInfo) (bool, error) {
 	logger.L().Start(fmt.Sprintf("Scanning image %s...", imgScanInfo.Image))
 
-	dbCfg, _ := imagescan.NewDefaultDBConfig()
-	svc, err := imagescan.NewScanService(dbCfg)
+	distCfg, installCfg, _ := imagescan.NewDefaultDBConfig()
+	svc, err := imagescan.NewScanServiceWithMatchers(distCfg, installCfg, imgScanInfo.UseDefaultMatchers)
 	if err != nil {
 		logger.L().StopError(fmt.Sprintf("Failed to initialize image scanner: %s", err))
-		return nil, err
+		return false, err
 	}
 	defer svc.Close()
 
@@ -183,16 +184,16 @@ func (ks *Kubescape) ScanImage(imgScanInfo *ksmetav1.ImageScanInfo, scanInfo *ca
 		exceptionPolicies, err := GetImageExceptionsFromFile(imgScanInfo.Exceptions)
 		if err != nil {
 			logger.L().StopError(fmt.Sprintf("Failed to load exceptions from file: %s", imgScanInfo.Exceptions))
-			return nil, err
+			return false, err
 		}
 
 		vulnerabilityExceptions, severityExceptions = getUniqueVulnerabilitiesAndSeverities(exceptionPolicies, imgScanInfo.Image)
 	}
 
-	scanResults, err := svc.Scan(ks.Context(), imgScanInfo.Image, creds, vulnerabilityExceptions, severityExceptions)
+	imageScanData, err := svc.Scan(ks.Context(), imgScanInfo.Image, creds, vulnerabilityExceptions, severityExceptions)
 	if err != nil {
 		logger.L().StopError(fmt.Sprintf("Failed to scan image: %s", imgScanInfo.Image))
-		return nil, err
+		return false, err
 	}
 
 	logger.L().StopSuccess(fmt.Sprintf("Successfully scanned image: %s", imgScanInfo.Image))
@@ -205,12 +206,7 @@ func (ks *Kubescape) ScanImage(imgScanInfo *ksmetav1.ImageScanInfo, scanInfo *ca
 
 	resultsHandler := resultshandling.NewResultsHandler(nil, outputPrinters, uiPrinter)
 
-	resultsHandler.ImageScanData = []cautils.ImageScanData{
-		{
-			PresenterConfig: scanResults,
-			Image:           imgScanInfo.Image,
-		},
-	}
+	resultsHandler.ImageScanData = []cautils.ImageScanData{*imageScanData}
 
-	return scanResults, resultsHandler.HandleResults(ks.Context(), scanInfo)
+	return svc.ExceedsSeverityThreshold(imagescan.ParseSeverity(scanInfo.FailThresholdSeverity), imageScanData.Matches), resultsHandler.HandleResults(ks.Context(), scanInfo)
 }

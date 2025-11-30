@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/anchore/clio"
-	"github.com/anchore/grype/grype/presenter/models"
 	"github.com/enescakir/emoji"
+	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/jwalton/gchalk"
 	"github.com/kubescape/go-logger"
 	"github.com/kubescape/go-logger/helpers"
@@ -21,7 +21,6 @@ import (
 	"github.com/kubescape/opa-utils/objectsenvelopes"
 	"github.com/kubescape/opa-utils/reporthandling/apis"
 	"github.com/kubescape/opa-utils/reporthandling/results/v1/reportsummary"
-	"github.com/olekukonko/tablewriter"
 	"k8s.io/utils/strings/slices"
 )
 
@@ -90,17 +89,10 @@ func (pp *PrettyPrinter) convertToImageScanSummary(imageScanData []cautils.Image
 			imageScanSummary.Images = append(imageScanSummary.Images, imageScanData[i].Image)
 		}
 
-		presenterConfig := imageScanData[i].PresenterConfig
-		doc, err := models.NewDocument(clio.Identification{}, presenterConfig.Packages, presenterConfig.Context, presenterConfig.Matches, presenterConfig.IgnoredMatches, presenterConfig.MetadataProvider, nil, presenterConfig.DBStatus)
-		if err != nil {
-			logger.L().Error(fmt.Sprintf("failed to create document for image: %v", imageScanData[i].Image), helpers.Error(err))
-			continue
-		}
-
-		CVEs := extractCVEs(doc.Matches)
+		CVEs := extractCVEs(imageScanData[i].Matches)
 		imageScanSummary.CVEs = append(imageScanSummary.CVEs, CVEs...)
 
-		setPkgNameToScoreMap(doc.Matches, imageScanSummary.PackageScores)
+		setPkgNameToScoreMap(imageScanData[i].Matches, imageScanSummary.PackageScores)
 
 		setSeverityToSummaryMap(CVEs, imageScanSummary.MapsSeverityToSummary)
 	}
@@ -121,9 +113,8 @@ func (pp *PrettyPrinter) ActionPrint(_ context.Context, opaSessionObj *cautils.O
 	if opaSessionObj != nil {
 		// TODO line is currently printed on framework scan only
 		if isPrintSeparatorType(pp.scanType) {
-			fmt.Fprintf(pp.writer, "\n"+
-				gchalk.WithAnsi256(238).Bold(fmt.Sprintf("%s\n", strings.Repeat("─", 50)))+
-				"\n")
+			fmt.Fprintf(pp.writer, "\n%s\n\n",
+				gchalk.WithAnsi256(238).Bold(strings.Repeat("─", 50)))
 		} else {
 			fmt.Fprintf(pp.writer, "\n")
 		}
@@ -174,20 +165,20 @@ func (pp *PrettyPrinter) printHeader(opaSessionObj *cautils.OPASessionObj) {
 	} else if pp.scanType == cautils.ScanTypeWorkload {
 		cautils.InfoDisplay(pp.writer, "Workload security posture overview for:\n")
 		ns := opaSessionObj.SingleResourceScan.GetNamespace()
-		rows := [][]string{}
+		var rows []table.Row
 		if ns != "" {
-			rows = append(rows, []string{"Namespace", gchalk.WithBrightWhite().Bold(opaSessionObj.SingleResourceScan.GetNamespace())})
+			rows = append(rows, table.Row{"Namespace", gchalk.WithBrightWhite().Bold(opaSessionObj.SingleResourceScan.GetNamespace())})
 		}
-		rows = append(rows, []string{"Kind", gchalk.WithBrightWhite().Bold(opaSessionObj.SingleResourceScan.GetKind())})
-		rows = append(rows, []string{"Name", gchalk.WithBrightWhite().Bold(opaSessionObj.SingleResourceScan.GetName())})
+		rows = append(rows, table.Row{"Kind", gchalk.WithBrightWhite().Bold(opaSessionObj.SingleResourceScan.GetKind())})
+		rows = append(rows, table.Row{"Name", gchalk.WithBrightWhite().Bold(opaSessionObj.SingleResourceScan.GetName())})
 
-		table := tablewriter.NewWriter(pp.writer)
+		tableWriter := table.NewWriter()
+		tableWriter.SetOutputMirror(pp.writer)
 
-		table.SetColumnAlignment([]int{tablewriter.ALIGN_RIGHT, tablewriter.ALIGN_LEFT})
-		table.SetUnicodeHVC(tablewriter.Regular, tablewriter.Regular, gchalk.Ansi256(238))
-		table.AppendBulk(rows)
+		tableWriter.SetColumnConfigs([]table.ColumnConfig{{Number: 1, Align: text.AlignRight}, {Number: 2, Align: text.AlignLeft}})
+		tableWriter.AppendRows(rows)
 
-		table.Render()
+		tableWriter.Render()
 
 		cautils.SimpleDisplay(pp.writer, "\nIn this overview, Kubescape shows you a summary of the security posture of a workload, including key controls that apply to its configuration, and the vulnerability status of the container image.\n\n\n")
 	}
@@ -209,7 +200,7 @@ func (pp *PrettyPrinter) SetWriter(ctx context.Context, outputFile string) {
 	pp.SetMainPrinter()
 }
 
-func (pp *PrettyPrinter) Score(score float32) {
+func (pp *PrettyPrinter) Score(_ float32) {
 }
 
 func (pp *PrettyPrinter) printResults(controls *reportsummary.ControlSummaries, allResources map[string]workloadinterface.IMetadata, sortedControlIDs [][]string) {
@@ -218,12 +209,12 @@ func (pp *PrettyPrinter) printResults(controls *reportsummary.ControlSummaries, 
 			controlSummary := controls.GetControl(reportsummary.EControlCriteriaID, c) //  summaryDetails.Controls ListControls().All() Controls.GetControl(ca)
 			pp.printTitle(controlSummary)
 			pp.printResources(controlSummary, allResources)
-			pp.printSummary(c, controlSummary)
+			pp.printSummary(controlSummary)
 		}
 	}
 }
 
-func (prettyPrinter *PrettyPrinter) printSummary(controlName string, controlSummary reportsummary.IControlSummary) {
+func (prettyPrinter *PrettyPrinter) printSummary(controlSummary reportsummary.IControlSummary) {
 	cautils.SimpleDisplay(prettyPrinter.writer, "Summary - ")
 	cautils.SuccessDisplay(prettyPrinter.writer, "Passed:%v   ", controlSummary.NumberOfResources().Passed())
 	cautils.WarningDisplay(prettyPrinter.writer, "Action Required:%v   ", controlSummary.NumberOfResources().Skipped())
