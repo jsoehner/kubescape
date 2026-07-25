@@ -1,0 +1,263 @@
+package cautils
+
+import (
+	"context"
+	"os"
+	"testing"
+
+	"github.com/go-git/go-git/v5"
+	apisv1 "github.com/kubescape/opa-utils/httpserver/apis/v1"
+	reporthandlingv2 "github.com/kubescape/opa-utils/reporthandling/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestSetContextMetadata(t *testing.T) {
+	{
+		ctx := reporthandlingv2.ContextMetadata{}
+		scanInfo := &ScanInfo{}
+		scanInfo.setContextMetadata(context.Background(), &ctx)
+
+		assert.NotNil(t, ctx.ClusterContextMetadata)
+		assert.Nil(t, ctx.DirectoryContextMetadata)
+		assert.Nil(t, ctx.FileContextMetadata)
+		assert.Nil(t, ctx.HelmContextMetadata)
+		assert.Nil(t, ctx.RepoContextMetadata)
+	}
+	// TODO: tests were commented out due to actual http calls ; http calls should be mocked.
+	/*{
+		ctx := reporthandlingv2.ContextMetadata{}
+		setContextMetadata(&ctx, "https://github.com/kubescape/kubescape")
+		assert.Nil(t, ctx.ClusterContextMetadata)
+		assert.Nil(t, ctx.DirectoryContextMetadata)
+		assert.Nil(t, ctx.FileContextMetadata)
+		assert.Nil(t, ctx.HelmContextMetadata)
+		assert.NotNil(t, ctx.RepoContextMetadata)
+		assert.Equal(t, "kubescape", ctx.RepoContextMetadata.Repo)
+		assert.Equal(t, "kubescape", ctx.RepoContextMetadata.Owner)
+		assert.Equal(t, "master", ctx.RepoContextMetadata.Branch)
+	}*/
+}
+
+func TestGetHostname(t *testing.T) {
+	// Test that the hostname is not empty
+	assert.NotEqual(t, "", getHostname())
+}
+
+func TestGetScanningContext(t *testing.T) {
+	repoRoot, err := os.MkdirTemp("", "repo")
+	require.NoError(t, err)
+	defer func(name string) {
+		_ = os.Remove(name)
+	}(repoRoot)
+	_, err = git.PlainClone(repoRoot, false, &git.CloneOptions{
+		URL: "https://github.com/kubescape/http-request",
+	})
+	require.NoError(t, err)
+	tmpFile, err := os.CreateTemp("", "single.*.txt")
+	require.NoError(t, err)
+	defer func(name string) {
+		_ = os.Remove(name)
+	}(tmpFile.Name())
+	tests := []struct {
+		name  string
+		input string
+		want  ScanningContext
+	}{
+		{
+			name:  "empty input",
+			input: "",
+			want:  ContextCluster,
+		},
+		{
+			name:  "git URL input",
+			input: "https://github.com/kubescape/http-request",
+			want:  ContextGitRemote,
+		},
+		{
+			name:  "local git input",
+			input: repoRoot,
+			want:  ContextGitLocal,
+		},
+		{
+			name:  "single file input",
+			input: tmpFile.Name(),
+			want:  ContextFile,
+		},
+		{
+			name:  "directory input",
+			input: os.TempDir(),
+			want:  ContextDir,
+		},
+		{
+			name:  "self-hosted GitLab URL that can't be cloned",
+			input: "https://gitlab.private-domain.com/my-org/my-repo.git",
+			want:  ContextDir, // Should return ContextDir when clone fails, not try to treat as local path
+		},
+		{
+			name:  "http URL that can't be cloned",
+			input: "http://gitlab.example.com/org/repo",
+			want:  ContextDir, // Should return ContextDir when clone fails, not try to treat as local path
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scanInfo := &ScanInfo{}
+			assert.Equalf(t, tt.want, scanInfo.getScanningContext(tt.input), "GetScanningContext(%v)", tt.input)
+		})
+	}
+}
+
+func TestScanInfoFormats(t *testing.T) {
+	testCases := []struct {
+		name  string
+		Input string
+		Want  []string
+	}{
+		{"empty string", "", []string{}},
+		{"single json", "json", []string{"json"}},
+		{"single pdf", "pdf", []string{"pdf"}},
+		{"single html", "html", []string{"html"}},
+		{"single sarif", "sarif", []string{"sarif"}},
+		{"multiple formats", "html,pdf,sarif", []string{"html", "pdf", "sarif"}},
+		{"pretty-printer with others", "pretty-printer,pdf,sarif", []string{"pretty-printer", "pdf", "sarif"}},
+		{"consecutive commas", "json,,pdf", []string{"json", "pdf"}},
+		{"whitespace-only entry", "json, ,pdf", []string{"json", "pdf"}},
+		{"trailing comma", "json,pdf,", []string{"json", "pdf"}},
+		{"leading comma", ",json,pdf", []string{"json", "pdf"}},
+		{"only commas", ",,,", []string{}},
+		{"whitespace around formats", " json , pdf ", []string{"json", "pdf"}},
+		{"duplicates preserved order", "json,pdf,json", []string{"json", "pdf"}},
+		{"duplicates with whitespace", "json, json ,pdf", []string{"json", "pdf"}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			scanInfo := &ScanInfo{Format: tc.Input}
+
+			got := scanInfo.Formats()
+
+			assert.Equal(t, tc.Want, got)
+		})
+	}
+}
+
+func TestScanInfoFormatsDeduplicatesInOrder(t *testing.T) {
+	testCases := []struct {
+		name   string
+		format string
+		want   []string
+	}{
+		{
+			name:   "duplicate json",
+			format: "json,json",
+			want:   []string{"json"},
+		},
+		{
+			name:   "keeps first occurrence order",
+			format: "json,pdf,json,sarif,pdf",
+			want:   []string{"json", "pdf", "sarif"},
+		},
+		{
+			name:   "trims whitespace and deduplicates",
+			format: "json, json,json",
+			want:   []string{"json"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			scanInfo := &ScanInfo{Format: tc.format}
+
+			assert.Equal(t, tc.want, scanInfo.Formats())
+		})
+	}
+}
+
+func TestScanInfoSetPolicyIdentifiers(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing []PolicyIdentifier
+		policies []string
+		want     []PolicyIdentifier
+	}{
+		{
+			name:     "adds new policies",
+			policies: []string{"nsa", "mitre"},
+			want: []PolicyIdentifier{
+				{Identifier: "nsa", Kind: apisv1.KindFramework},
+				{Identifier: "mitre", Kind: apisv1.KindFramework},
+			},
+		},
+		{
+			name: "skips existing policy",
+			existing: []PolicyIdentifier{
+				{Identifier: "nsa", Kind: apisv1.KindFramework},
+			},
+			policies: []string{"nsa", "mitre"},
+			want: []PolicyIdentifier{
+				{Identifier: "nsa", Kind: apisv1.KindFramework},
+				{Identifier: "mitre", Kind: apisv1.KindFramework},
+			},
+		},
+		{
+			name:     "empty policy list leaves existing values",
+			existing: []PolicyIdentifier{{Identifier: "C-0001", Kind: apisv1.KindControl}},
+			want:     []PolicyIdentifier{{Identifier: "C-0001", Kind: apisv1.KindControl}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scanInfo := &ScanInfo{PolicyIdentifier: tt.existing}
+
+			scanInfo.SetPolicyIdentifiers(tt.policies, apisv1.KindFramework)
+
+			assert.Equal(t, tt.want, scanInfo.PolicyIdentifier)
+		})
+	}
+}
+
+func TestSplitNamespaceList(t *testing.T) {
+	testCases := []struct {
+		name string
+		in   string
+		want []string
+	}{
+		{"empty", "", nil},
+		{"single", "ns-a", []string{"ns-a"}},
+		{"multiple", "ns-a,ns-b,ns-c", []string{"ns-a", "ns-b", "ns-c"}},
+		{"whitespace", "ns-a, ns-b ,ns-c", []string{"ns-a", "ns-b", "ns-c"}},
+		{"empty entries dropped", "ns-a,,ns-b,", []string{"ns-a", "ns-b"}},
+		{"only commas", ",,,", nil},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, splitNamespaceList(tc.in))
+		})
+	}
+}
+
+func TestScanInfoToScanMetadataNamespaces(t *testing.T) {
+	t.Run("populates excluded namespaces", func(t *testing.T) {
+		scanInfo := &ScanInfo{ExcludedNamespaces: "kube-system,kube-public"}
+		md := scanInfoToScanMetadata(context.Background(), scanInfo)
+		assert.Equal(t, []string{"kube-system", "kube-public"}, md.ScanMetadata.ExcludedNamespaces)
+		assert.Empty(t, md.ScanMetadata.IncludeNamespaces)
+	})
+
+	t.Run("populates included namespaces", func(t *testing.T) {
+		scanInfo := &ScanInfo{IncludeNamespaces: "default,prod"}
+		md := scanInfoToScanMetadata(context.Background(), scanInfo)
+		assert.Equal(t, []string{"default", "prod"}, md.ScanMetadata.IncludeNamespaces)
+		assert.Empty(t, md.ScanMetadata.ExcludedNamespaces)
+	})
+
+	t.Run("empty when not set", func(t *testing.T) {
+		scanInfo := &ScanInfo{}
+		md := scanInfoToScanMetadata(context.Background(), scanInfo)
+		assert.Empty(t, md.ScanMetadata.ExcludedNamespaces)
+		assert.Empty(t, md.ScanMetadata.IncludeNamespaces)
+	})
+}
