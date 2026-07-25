@@ -1,23 +1,49 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/armosec/kubescape/clihandler/cmd"
+	"github.com/kubescape/backend/pkg/versioncheck"
+	"github.com/kubescape/go-logger"
+	"github.com/kubescape/kubescape/v3/cmd"
+)
+
+// GoReleaser will fill these at build time
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
 )
 
 func main() {
-	CheckLatestVersion()
-	cmd.Execute()
-}
+	// Set the global build number for version checking
+	versioncheck.BuildNumber = version
 
-func CheckLatestVersion() {
-	latest, err := cmd.GetLatestVersion()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-	} else if latest != cmd.BuildNumber {
-		fmt.Println("Warning: You are not updated to the latest release: " + latest)
+	// Capture interrupt signal on a dedicated channel so the watcher can
+	// distinguish a real signal from a normal cancel() on graceful exit.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		select {
+		case <-sigCh:
+			logger.L().StopError("Received interrupt signal, exiting...")
+			// Clear the signal handler so a second signal terminates immediately.
+			signal.Stop(sigCh)
+			cancel()
+		case <-ctx.Done():
+			// Normal shutdown — no log line.
+		}
+	}()
+
+	if err := cmd.Execute(ctx, version, commit, date); err != nil {
+		cancel()
+		logger.L().Fatal(err.Error())
 	}
-
 }

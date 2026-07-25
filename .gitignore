@@ -1,5 +1,25 @@
 *.vs*
 *kubescape*
+!*Dockerfile*
+# vendored VAP bundle: the *kubescape* rule above (for the built binary) would
+# otherwise swallow this policy file, which must be committed so it can be embedded.
+!core/pkg/opaprocessor/cel/vapdata/kubescape-validating-admission-policies.yaml
 *debug*
-*vender*
+*vendor*
+*.pyc*
 .idea
+.history
+ca.srl
+*.out
+ks
+cosign.key
+
+dist/
+
+# Test output files
+customFilename.pdf
+customFilename.xml
+FETCH_HEAD
+tallation.md
+nginx:latest.json
+results.json
