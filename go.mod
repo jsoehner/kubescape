@@ -247,7 +247,7 @@ require (
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/chrismellard/docker-credential-acr-env v0.0.0-20230304212654-82a0ddb27589 // indirect
-	github.com/cilium/cilium v1.19.4 // indirect
+	github.com/cilium/cilium v1.19.5 // indirect
 	github.com/cilium/ebpf v0.22.0 // indirect
 	github.com/cilium/hive v0.0.0-20260108104938-97756f6ff54c // indirect
 	github.com/clbanning/mxj/v2 v2.7.0 // indirect
